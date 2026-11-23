@@ -107,6 +107,11 @@ function copyNodeApiPlugin(): Plugin {
         if (fs.existsSync(srcApiDir)) {
           fs.cpSync(srcApiDir, distApiDir, { recursive: true })
         }
+        const ecoSrc = path.resolve(__dirname, 'ecosystem.config.cjs')
+        const ecoDest = path.resolve(__dirname, 'dist/ecosystem.config.cjs')
+        if (fs.existsSync(ecoSrc)) {
+          fs.copyFileSync(ecoSrc, ecoDest)
+        }
       } catch {
         // Ignore if dist directory not ready
       }
