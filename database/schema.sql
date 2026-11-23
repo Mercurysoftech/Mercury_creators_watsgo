@@ -110,12 +110,12 @@ CREATE TABLE IF NOT EXISTS `creator_profiles` (
 -- ----------------------------------------------------------------------------
 -- Sample / Initial Seed Data (Optional for testing)
 -- ----------------------------------------------------------------------------
--- Password for demo user: DemoPass123! (hashed using bcrypt)
+-- Password for demo user: Password123!
 -- Note: Replace with real credentials in production.
 -- ----------------------------------------------------------------------------
 INSERT INTO `users` (`id`, `full_name`, `email`, `mobile_number`, `password_hash`, `role`, `is_verified`, `status`)
 VALUES 
-(1, 'Priya Malhotra', 'priya@email.com', '9876543210', '$2b$10$w8.15tKkWpYw7gZ/aJzE2.tY0z8HovD/Ufq2u8jVzH5eI2aWl41iC', 'creator', 1, 'active')
+(1, 'Priya Malhotra', 'priya@email.com', '9876543210', '7c69e4e80b6f776a64430400ca57d273a1324132673607eb45211711e4aad7a9a8861e01c1dfc84b0980ace416395ac10cd983a8394f878e4e3047ba04cbb8d0$7490d6997f8cac83279d00c33bc4b4a5', 'creator', 1, 'active')
 ON DUPLICATE KEY UPDATE `email`=`email`;
 
 INSERT INTO `creator_profiles` (`user_id`, `display_name`, `bio`, `country`, `city`, `preferred_language`, `niche_categories`, `audience_size`, `primary_platform`, `onboarding_completed`)
