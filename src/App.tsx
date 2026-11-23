@@ -1,4 +1,13 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import {
+  registerCreator,
+  loginCreator,
+  verifyOtp,
+  resendOtp,
+  logout,
+  getStoredUser,
+  type AuthUser,
+} from './api/auth'
 
 type View =
   | 'overview'
@@ -89,13 +98,403 @@ function Landing({ onStart, onLogin }: { onStart: () => void; onLogin: () => voi
   </div>
 }
 
-function Auth({ mode, setMode, onDone }: { mode: 'login'|'register'; setMode: (m:'login'|'register')=>void; onDone: ()=>void }) {
+function Auth({
+  mode,
+  setMode,
+  onDone,
+}: {
+  mode: 'login' | 'register'
+  setMode: (m: 'login' | 'register') => void
+  onDone: (user?: AuthUser) => void
+}) {
   const [show, setShow] = useState(false)
   const [otp, setOtp] = useState(false)
   const [loading, setLoading] = useState(false)
-  const submit = (e: React.FormEvent) => { e.preventDefault(); setLoading(true); setTimeout(()=>{setLoading(false); mode==='register'?setOtp(true):onDone()},650) }
-  if (otp) return <div className="auth-page"><div className="auth-brand"><Logo dark/><div><span className="eyebrow">ONE LAST STEP</span><h1>Verify your<br/>creator account.</h1><p>Secure access. Trusted creators. Better partnerships.</p></div></div><div className="auth-panel"><button className="back-link" onClick={()=>setOtp(false)}>← Back</button><div className="auth-box"><div className="auth-icon"><Icon name="bell"/></div><h2>Check your inbox</h2><p>We sent a 6-digit code to <b>priya@email.com</b></p><div className="otp-row">{[4,8,2,7,1,6].map((x,i)=><input key={i} defaultValue={x} maxLength={1}/>)}</div><Button onClick={onDone}>Verify & continue</Button><small>Didn't receive it? <button>Resend in 00:24</button></small></div></div></div>
-  return <div className="auth-page"><div className="auth-brand"><Logo dark/><div><span className="eyebrow">{mode==='register'?'JOIN THE CREATOR ECONOMY':'WELCOME BACK'}</span><h1>{mode==='register'?'Your content has value. Start earning from it.':'Your creator business, all in one place.'}</h1><p>Join thousands of creators earning from the products they genuinely recommend.</p><div className="auth-proof"><b>₹8.4Cr+</b><span>paid to creators</span><b>2.8M+</b><span>orders attributed</span></div></div><small>Trusted by 12,000+ creators across India</small></div><div className="auth-panel"><button className="back-link" onClick={()=>location.reload()}>← Back to WatsGo</button><form className="auth-form" onSubmit={submit}><h2>{mode==='register'?'Create your creator account':'Log in to Creator Hub'}</h2><p>{mode==='register'?'Start for free. No credit card required.':'Welcome back — let’s keep growing.'}</p><button type="button" className="google-btn"><b>G</b> Continue with Google</button><div className="or"><span>or continue with email</span></div>{mode==='register'&&<><label>Full name<input required placeholder="Your full name"/></label><label>Mobile number<div className="phone"><span>+91</span><input required placeholder="98765 43210"/></div></label></>}<label>Email address<input type="email" required placeholder="you@example.com"/></label><label>Password<div className="password"><input type={show?'text':'password'} required placeholder="At least 8 characters"/><button type="button" onClick={()=>setShow(!show)}><Icon name="eye"/></button></div></label>{mode==='login'&&<div className="form-row"><label className="check"><input type="checkbox"/> Remember me</label><button type="button">Forgot password?</button></div>}{mode==='register'&&<label className="check"><input type="checkbox" required/> I agree to the Terms of Service and Privacy Policy.</label>}<Button type="submit" disabled={loading}>{loading?'Please wait…':mode==='register'?'Create creator account':'Log in'}</Button><p className="switch">{mode==='register'?'Already have an account?':'New to WatsGo?'} <button type="button" onClick={()=>setMode(mode==='register'?'login':'register')}>{mode==='register'?'Log in':'Create an account'}</button></p></form></div></div>
+  const [error, setError] = useState('')
+  const [fullName, setFullName] = useState('Priya Malhotra')
+  const [mobile, setMobile] = useState('9876543210')
+  const [email, setEmail] = useState('priya@email.com')
+  const [password, setPassword] = useState('Password123!')
+  const [rememberMe, setRememberMe] = useState(true)
+  const [agreeTerms, setAgreeTerms] = useState(true)
+  const [otpDigits, setOtpDigits] = useState(['4', '8', '2', '7', '1', '6'])
+  const [otpPreview, setOtpPreview] = useState('')
+  const [countdown, setCountdown] = useState(30)
+
+  useEffect(() => {
+    if (!otp || countdown <= 0) return
+    const timer = setInterval(() => setCountdown((c) => c - 1), 1000)
+    return () => clearInterval(timer)
+  }, [otp, countdown])
+
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+    if (!agreeTerms) {
+      setError('Please agree to the Terms of Service and Privacy Policy.')
+      return
+    }
+    setLoading(true)
+    try {
+      const res = await registerCreator({
+        full_name: fullName,
+        email,
+        mobile_number: mobile,
+        password,
+      })
+      setLoading(false)
+      if (res.requires_otp) {
+        if (res.otp_preview) {
+          setOtpPreview(res.otp_preview)
+          setOtpDigits(res.otp_preview.split(''))
+        }
+        setOtp(true)
+        setCountdown(30)
+      }
+    } catch (err: any) {
+      setLoading(false)
+      setError(err.message || 'Registration failed. Please try again.')
+    }
+  }
+
+  const handleLoginSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+    try {
+      const res = await loginCreator({
+        email,
+        password,
+        remember_me: rememberMe,
+      })
+      setLoading(false)
+      if (res.requires_otp) {
+        if (res.otp_preview) {
+          setOtpPreview(res.otp_preview)
+          setOtpDigits(res.otp_preview.split(''))
+        }
+        setOtp(true)
+        setCountdown(30)
+      } else if (res.user) {
+        onDone(res.user)
+      }
+    } catch (err: any) {
+      setLoading(false)
+      setError(err.message || 'Login failed. Please check your credentials.')
+    }
+  }
+
+  const handleVerifySubmit = async () => {
+    setError('')
+    const code = otpDigits.join('')
+    if (code.length !== 6) {
+      setError('Please enter the full 6-digit OTP code.')
+      return
+    }
+    setLoading(true)
+    try {
+      const res = await verifyOtp({
+        email,
+        otp_code: code,
+      })
+      setLoading(false)
+      if (res.user) {
+        onDone(res.user)
+      }
+    } catch (err: any) {
+      setLoading(false)
+      setError(err.message || 'OTP verification failed. Please try again.')
+    }
+  }
+
+  const handleResend = async () => {
+    if (countdown > 0) return
+    setError('')
+    try {
+      const res = await resendOtp(email)
+      if (res.otp_preview) {
+        setOtpPreview(res.otp_preview)
+        setOtpDigits(res.otp_preview.split(''))
+      }
+      setCountdown(30)
+    } catch (err: any) {
+      setError(err.message || 'Failed to resend code.')
+    }
+  }
+
+  const handleOtpDigit = (idx: number, val: string) => {
+    const digit = val.slice(-1)
+    const copy = [...otpDigits]
+    copy[idx] = digit
+    setOtpDigits(copy)
+    if (digit && idx < 5) {
+      const nextEl = document.getElementById(`otp-box-${idx + 1}`)
+      nextEl?.focus()
+    }
+  }
+
+  if (otp)
+    return (
+      <div className="auth-page">
+        <div className="auth-brand">
+          <Logo dark />
+          <div>
+            <span className="eyebrow">ONE LAST STEP</span>
+            <h1>
+              Verify your
+              <br />
+              creator account.
+            </h1>
+            <p>Secure access. Trusted creators. Better partnerships.</p>
+          </div>
+        </div>
+        <div className="auth-panel">
+          <button
+            className="back-link"
+            onClick={() => {
+              setOtp(false)
+              setError('')
+            }}
+          >
+            ← Back
+          </button>
+          <div className="auth-box">
+            <div className="auth-icon">
+              <Icon name="bell" />
+            </div>
+            <h2>Check your inbox</h2>
+            <p>
+              We sent a 6-digit verification code to <b>{email}</b>
+            </p>
+
+            {otpPreview && (
+              <div
+                style={{
+                  background: '#eff6ff',
+                  border: '1px solid #bfdbfe',
+                  color: '#1d4ed8',
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                  margin: '14px 0 0',
+                }}
+              >
+                💡 Live OTP code: <b>{otpPreview}</b>
+              </div>
+            )}
+
+            {error && (
+              <div
+                style={{
+                  background: '#fef2f2',
+                  border: '1px solid #fecaca',
+                  color: '#b91c1c',
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                  marginTop: '12px',
+                }}
+              >
+                ⚠️ {error}
+              </div>
+            )}
+
+            <div className="otp-row">
+              {otpDigits.map((x, i) => (
+                <input
+                  key={i}
+                  id={`otp-box-${i}`}
+                  value={x}
+                  onChange={(e) => handleOtpDigit(i, e.target.value)}
+                  maxLength={1}
+                />
+              ))}
+            </div>
+
+            <Button onClick={handleVerifySubmit} disabled={loading}>
+              {loading ? 'Verifying…' : 'Verify & continue'}
+            </Button>
+
+            <small>
+              Didn't receive it?{' '}
+              <button
+                type="button"
+                onClick={handleResend}
+                disabled={countdown > 0}
+                style={{ cursor: countdown > 0 ? 'not-allowed' : 'pointer', opacity: countdown > 0 ? 0.7 : 1 }}
+              >
+                {countdown > 0 ? `Resend in 00:${countdown < 10 ? '0' : ''}${countdown}` : 'Resend OTP'}
+              </button>
+            </small>
+          </div>
+        </div>
+      </div>
+    )
+
+  return (
+    <div className="auth-page">
+      <div className="auth-brand">
+        <Logo dark />
+        <div>
+          <span className="eyebrow">
+            {mode === 'register' ? 'JOIN THE CREATOR ECONOMY' : 'WELCOME BACK'}
+          </span>
+          <h1>
+            {mode === 'register'
+              ? 'Your content has value. Start earning from it.'
+              : 'Your creator business, all in one place.'}
+          </h1>
+          <p>Join thousands of creators earning from the products they genuinely recommend.</p>
+          <div className="auth-proof">
+            <b>₹8.4Cr+</b>
+            <span>paid to creators</span>
+            <b>2.8M+</b>
+            <span>orders attributed</span>
+          </div>
+        </div>
+        <small>Trusted by 12,000+ creators across India</small>
+      </div>
+      <div className="auth-panel">
+        <button className="back-link" onClick={() => location.reload()}>
+          ← Back to WatsGo
+        </button>
+        <form
+          className="auth-form"
+          onSubmit={mode === 'register' ? handleRegisterSubmit : handleLoginSubmit}
+        >
+          <h2>{mode === 'register' ? 'Create your creator account' : 'Log in to Creator Hub'}</h2>
+          <p>
+            {mode === 'register'
+              ? 'Start for free. No credit card required.'
+              : 'Welcome back — let’s keep growing.'}
+          </p>
+
+          {error && (
+            <div
+              style={{
+                background: '#fef2f2',
+                border: '1px solid #fecaca',
+                color: '#b91c1c',
+                padding: '10px 14px',
+                borderRadius: '8px',
+                fontSize: '13px',
+                margin: '12px 0',
+              }}
+            >
+              ⚠️ {error}
+            </div>
+          )}
+
+          <button type="button" className="google-btn">
+            <b>G</b> Continue with Google
+          </button>
+          <div className="or">
+            <span>or continue with email</span>
+          </div>
+
+          {mode === 'register' && (
+            <>
+              <label>
+                Full name
+                <input
+                  required
+                  placeholder="Your full name"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                />
+              </label>
+              <label>
+                Mobile number
+                <div className="phone">
+                  <span>+91</span>
+                  <input
+                    required
+                    placeholder="98765 43210"
+                    value={mobile}
+                    onChange={(e) => setMobile(e.target.value)}
+                  />
+                </div>
+              </label>
+            </>
+          )}
+
+          <label>
+            Email address
+            <input
+              type="email"
+              required
+              placeholder="you@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </label>
+
+          <label>
+            Password
+            <div className="password">
+              <input
+                type={show ? 'text' : 'password'}
+                required
+                placeholder="At least 8 characters"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+              <button type="button" onClick={() => setShow(!show)}>
+                <Icon name="eye" />
+              </button>
+            </div>
+          </label>
+
+          {mode === 'login' && (
+            <div className="form-row">
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                />{' '}
+                Remember me
+              </label>
+              <button type="button">Forgot password?</button>
+            </div>
+          )}
+
+          {mode === 'register' && (
+            <label className="check">
+              <input
+                type="checkbox"
+                required
+                checked={agreeTerms}
+                onChange={(e) => setAgreeTerms(e.target.checked)}
+              />{' '}
+              I agree to the Terms of Service and Privacy Policy.
+            </label>
+          )}
+
+          <Button type="submit" disabled={loading}>
+            {loading
+              ? 'Please wait…'
+              : mode === 'register'
+                ? 'Create creator account'
+                : 'Log in'}
+          </Button>
+
+          <p className="switch">
+            {mode === 'register' ? 'Already have an account?' : 'New to WatsGo?'}{' '}
+            <button
+              type="button"
+              onClick={() => {
+                setError('')
+                setMode(mode === 'register' ? 'login' : 'register')
+              }}
+            >
+              {mode === 'register' ? 'Log in' : 'Create an account'}
+            </button>
+          </p>
+        </form>
+      </div>
+    </div>
+  )
 }
 
 const onboardingSteps = ['About you','Creator niche','Social accounts','Your audience','Payout details','Review']
@@ -122,8 +521,9 @@ const products = [
 function Status({ children, tone='green' }: { children: ReactNode; tone?: string }) { return <span className={`status ${tone}`}>{children}</span> }
 function Metric({ title,value,change,icon }: { title:string;value:string;change:string;icon:string }) { return <article className="metric"><div><span>{title}</span><b>{value}</b><small>{change}</small></div><i><Icon name={icon}/></i></article> }
 
-function Overview({ go }: { go:(v:View)=>void }) {
-  return <><div className="page-heading"><div><span className="eyebrow">TUESDAY, 24 JUNE</span><h1>Welcome back, Priya.</h1><p>Here’s how your creator business is performing.</p></div><div><select><option>Last 30 days</option><option>Last 7 days</option><option>Last 90 days</option></select><Button onClick={()=>go('products')} icon="plus">Create smart link</Button></div></div><div className="sample-note"><Icon name="help" size={15}/> You’re viewing sample data for this interactive prototype.</div><div className="metrics"><Metric title="Total clicks" value="24,892" change="↑ 12.4% vs last period" icon="search"/><Metric title="Total orders" value="1,284" change="↑ 8.7% vs last period" icon="cart"/><Metric title="Revenue generated" value="₹8.42L" change="↑ 18.2% vs last period" icon="chart"/><Metric title="Commission earned" value="₹48,260" change="↑ 14.8% vs last period" icon="wallet"/></div><div className="dashboard-grid"><article className="panel chart-panel"><div className="panel-head"><div><h3>Revenue performance</h3><p>Revenue and commission over time</p></div><div className="legend"><span>● Revenue</span><span>● Commission</span></div></div><div className="big-chart"><div className="chart-y"><span>₹30K</span><span>₹20K</span><span>₹10K</span><span>₹0</span></div><svg viewBox="0 0 700 210" preserveAspectRatio="none"><defs><linearGradient id="area" x1="0" y1="0" x2="0" y2="1"><stop stopColor="#2563eb" stopOpacity=".2"/><stop offset="1" stopColor="#2563eb" stopOpacity="0"/></linearGradient></defs><path d="M0 180 C50 150 80 170 125 125 S200 150 250 100 S330 120 385 72 S470 105 525 48 S620 80 700 22 V210H0Z" fill="url(#area)"/><path d="M0 180 C50 150 80 170 125 125 S200 150 250 100 S330 120 385 72 S470 105 525 48 S620 80 700 22" fill="none" stroke="#2563eb" strokeWidth="3"/><path d="M0 195 C90 180 130 190 200 165 S330 180 400 145 S540 155 700 115" fill="none" stroke="#8b5cf6" strokeWidth="2.5" strokeDasharray="6 6"/></svg><div className="chart-x"><span>1 Jun</span><span>7 Jun</span><span>14 Jun</span><span>21 Jun</span><span>24 Jun</span></div></div></article><article className="panel balance-card"><div className="panel-head"><div><h3>Available balance</h3><p>Ready to withdraw</p></div><Icon name="wallet"/></div><b>₹32,840</b><span>₹8,420 pending confirmation</span><Button onClick={()=>go('payouts')}>Request payout</Button><small>Next automatic payout: 1 July</small></article></div><div className="dashboard-grid lower"><article className="panel"><div className="panel-head"><div><h3>Top performing products</h3><p>By commission earned</p></div><button onClick={()=>go('products')}>View all →</button></div><div className="mini-products">{products.slice(0,3).map((p,i)=><div key={p.name}><span className="mini-img" style={{backgroundPosition:p.pos}}/><div><b>{p.name}</b><small>{p.brand}</small></div><span><b>{['₹12,480','₹8,920','₹6,760'][i]}</b><small>{['342','216','148'][i]} orders</small></span></div>)}</div></article><article className="panel activity"><div className="panel-head"><div><h3>Recent activity</h3><p>Latest updates from your account</p></div></div>{[['cart','New order from AirBeat Pro','Commission +₹1,260','2 min'],['megaphone','Campaign application approved','Nova Summer Sound','1 hr'],['wallet','Commission confirmed','Order #WG-89241 · +₹450','3 hr'],['link','Smart link reached 1,000 clicks','Summer Travel Essentials','Yesterday']].map(x=><div key={x[1]}><i><Icon name={x[0]} size={17}/></i><span><b>{x[1]}</b><small>{x[2]}</small></span><time>{x[3]}</time></div>)}</article></div></>
+function Overview({ go, user }: { go: (v: View) => void; user?: AuthUser | null }) {
+  const firstName = user?.full_name?.split(' ')[0] || 'Priya'
+  return <><div className="page-heading"><div><span className="eyebrow">TUESDAY, 24 JUNE</span><h1>Welcome back, {firstName}.</h1><p>Here’s how your creator business is performing.</p></div><div><select><option>Last 30 days</option><option>Last 7 days</option><option>Last 90 days</option></select><Button onClick={()=>go('products')} icon="plus">Create smart link</Button></div></div><div className="sample-note"><Icon name="help" size={15}/> You’re viewing sample data for this interactive prototype.</div><div className="metrics"><Metric title="Total clicks" value="24,892" change="↑ 12.4% vs last period" icon="search"/><Metric title="Total orders" value="1,284" change="↑ 8.7% vs last period" icon="cart"/><Metric title="Revenue generated" value="₹8.42L" change="↑ 18.2% vs last period" icon="chart"/><Metric title="Commission earned" value="₹48,260" change="↑ 14.8% vs last period" icon="wallet"/></div><div className="dashboard-grid"><article className="panel chart-panel"><div className="panel-head"><div><h3>Revenue performance</h3><p>Revenue and commission over time</p></div><div className="legend"><span>● Revenue</span><span>● Commission</span></div></div><div className="big-chart"><div className="chart-y"><span>₹30K</span><span>₹20K</span><span>₹10K</span><span>₹0</span></div><svg viewBox="0 0 700 210" preserveAspectRatio="none"><defs><linearGradient id="area" x1="0" y1="0" x2="0" y2="1"><stop stopColor="#2563eb" stopOpacity=".2"/><stop offset="1" stopColor="#2563eb" stopOpacity="0"/></linearGradient></defs><path d="M0 180 C50 150 80 170 125 125 S200 150 250 100 S330 120 385 72 S470 105 525 48 S620 80 700 22 V210H0Z" fill="url(#area)"/><path d="M0 180 C50 150 80 170 125 125 S200 150 250 100 S330 120 385 72 S470 105 525 48 S620 80 700 22" fill="none" stroke="#2563eb" strokeWidth="3"/><path d="M0 195 C90 180 130 190 200 165 S330 180 400 145 S540 155 700 115" fill="none" stroke="#8b5cf6" strokeWidth="2.5" strokeDasharray="6 6"/></svg><div className="chart-x"><span>1 Jun</span><span>7 Jun</span><span>14 Jun</span><span>21 Jun</span><span>24 Jun</span></div></div></article><article className="panel balance-card"><div className="panel-head"><div><h3>Available balance</h3><p>Ready to withdraw</p></div><Icon name="wallet"/></div><b>₹32,840</b><span>₹8,420 pending confirmation</span><Button onClick={()=>go('payouts')}>Request payout</Button><small>Next automatic payout: 1 July</small></article></div><div className="dashboard-grid lower"><article className="panel"><div className="panel-head"><div><h3>Top performing products</h3><p>By commission earned</p></div><button onClick={()=>go('products')}>View all →</button></div><div className="mini-products">{products.slice(0,3).map((p,i)=><div key={p.name}><span className="mini-img" style={{backgroundPosition:p.pos}}/><div><b>{p.name}</b><small>{p.brand}</small></div><span><b>{['₹12,480','₹8,920','₹6,760'][i]}</b><small>{['342','216','148'][i]} orders</small></span></div>)}</div></article><article className="panel activity"><div className="panel-head"><div><h3>Recent activity</h3><p>Latest updates from your account</p></div></div>{[['cart','New order from AirBeat Pro','Commission +₹1,260','2 min'],['megaphone','Campaign application approved','Nova Summer Sound','1 hr'],['wallet','Commission confirmed','Order #WG-89241 · +₹450','3 hr'],['link','Smart link reached 1,000 clicks','Summer Travel Essentials','Yesterday']].map(x=><div key={x[1]}><i><Icon name={x[0]} size={17}/></i><span><b>{x[1]}</b><small>{x[2]}</small></span><time>{x[3]}</time></div>)}</article></div></>
 }
 
 function Products({ go, toast }: { go:(v:View)=>void;toast:(s:string)=>void }) {
@@ -177,39 +577,224 @@ function Profile({ view, go, toast }: { view:View;go:(v:View)=>void;toast:(s:str
 
 function Support({ toast }: { toast:(s:string)=>void }) { return <><div className="support-hero"><span className="eyebrow">CREATOR SUPPORT</span><h1>How can we help?</h1><div className="search-box"><Icon name="search"/><input placeholder="Search help articles…"/></div></div><div className="help-grid">{[['link','Smart links','Create, share and troubleshoot links'],['megaphone','Campaigns','Applications, briefs and guidelines'],['wallet','Earnings & payouts','Commissions, wallet and withdrawals'],['user','Account & verification','Profile, security and approvals']].map(x=><article className="panel" key={x[1]}><Icon name={x[0]} size={28}/><h3>{x[1]}</h3><p>{x[2]}</p><button>Browse articles →</button></article>)}</div><div className="panel ticket"><div><h2>Still need help?</h2><p>Our creator support team typically replies within one business day.</p></div><Button onClick={()=>toast('Support ticket created')}>Submit support ticket</Button></div><div className="faq in-app"><div><h2>Popular questions</h2></div><div>{['How do commissions become available?','Why is an order missing?','How do I update payout details?','Can I promote outside social media?'].map(x=><details key={x}><summary>{x}<Icon name="plus"/></summary><p>Visit the complete help article for step-by-step guidance and policy details.</p></details>)}</div></div></> }
 
-function AppShell({ onLogout }: { onLogout:()=>void }) {
-  const [view,setView]=useState<View>('overview')
-  const [open,setOpen]=useState(false)
-  const [profileOpen,setProfileOpen]=useState(false)
-  const [logoutOpen,setLogoutOpen]=useState(false)
-  const [toast,setToast]=useState('')
-  const notify=(s:string)=>{setToast(s);setTimeout(()=>setToast(''),3000)}
-  const go=(v:View)=>{setView(v);setOpen(false);window.scrollTo(0,0)}
-  const title=useMemo(()=>nav.find(x=>x[0]===view)?.[2]||'Creator Hub',[view])
-  let content:ReactNode
-  if(view==='overview') content=<Overview go={go}/>
-  else if(view==='products') content=<Products go={go} toast={notify}/>
-  else if(view==='product-detail') content=<ProductDetail go={go} toast={notify}/>
-  else if(view==='campaigns') content=<Campaigns go={go}/>
-  else if(view==='campaign-detail') content=<CampaignDetail go={go} toast={notify}/>
-  else if(view==='my-campaigns') content=<MyCampaigns go={go}/>
-  else if(view==='links') content=<Links go={go} toast={notify}/>
-  else if(view==='link-analytics') content=<LinkAnalytics go={go}/>
-  else if(view==='storefront') content=<Storefront toast={notify}/>
-  else if(view==='orders') content=<Orders go={go}/>
-  else if(view==='order-detail') content=<OrderDetail go={go}/>
-  else if(view==='earnings'||view==='wallet'||view==='payouts') content=<Wallet view={view} go={go} toast={notify}/>
-  else if(view==='notifications') content=<Notifications/>
-  else if(view==='profile'||view==='settings') content=<Profile view={view} go={go} toast={notify}/>
-  else content=<Support toast={notify}/>
-  return <div className="app-shell"><aside className={`sidebar ${open?'open':''}`}><div className="side-head"><Logo dark/><button onClick={()=>setOpen(false)}><Icon name="close"/></button></div><nav>{nav.map(x=><button className={view===x[0]||(view.includes(x[0])&&x[0]!=='overview')?'active':''} onClick={()=>go(x[0])} key={x[0]}><Icon name={x[1]} size={18}/><span>{x[2]}</span>{x[0]==='notifications'&&<i>3</i>}</button>)}</nav><div className="side-bottom"><div className="mini-profile"><span>PM</span><div><b>Priya Moves</b><small>Verified creator</small></div><button onClick={()=>setLogoutOpen(true)}>•••</button></div></div></aside><div className="app-main"><header className="topbar"><button className="mobile-menu" onClick={()=>setOpen(true)}><Icon name="menu"/></button><span className="mobile-title">{title}</span><div className="top-search"><Icon name="search" size={18}/><input placeholder="Search anything…"/><kbd>⌘ K</kbd></div><div className="top-actions"><button onClick={()=>go('support')}><Icon name="help"/></button><button className="notification-button" onClick={()=>go('notifications')}><Icon name="bell"/><i/></button><button className="top-profile" onClick={()=>setProfileOpen(!profileOpen)}><span>PM</span><div><b>Priya Moves</b><small>Verified creator</small></div><span>⌄</span></button></div>{profileOpen&&<div className="profile-menu"><button onClick={()=>go('profile')}><Icon name="user"/> My profile</button><button onClick={()=>go('settings')}><Icon name="settings"/> Account settings</button><button onClick={()=>go('wallet')}><Icon name="wallet"/> Wallet</button><button onClick={()=>go('support')}><Icon name="help"/> Help & support</button><hr/><button className="red" onClick={()=>setLogoutOpen(true)}><Icon name="logout"/> Log out</button></div>}</header><main className="page-content">{content}</main><nav className="mobile-bottom">{nav.slice(0,4).map(x=><button className={view===x[0]?'active':''} onClick={()=>go(x[0])} key={x[0]}><Icon name={x[1]}/><span>{x[2].split(' ')[0]}</span></button>)}<button onClick={()=>setOpen(true)}><Icon name="menu"/><span>More</span></button></nav></div>{open&&<div className="nav-overlay" onClick={()=>setOpen(false)}/>} {toast&&<div className="toast"><Icon name="check"/><span>{toast}</span><button onClick={()=>setToast('')}><Icon name="close" size={16}/></button></div>}{logoutOpen&&<div className="modal-backdrop"><div className="modal small"><span className="logout-icon"><Icon name="logout"/></span><h2>Log out of WatsGo?</h2><p>You’ll need to sign in again to access your creator workspace.</p><div className="modal-actions"><Button kind="secondary" onClick={()=>setLogoutOpen(false)}>Cancel</Button><Button kind="danger" onClick={onLogout}>Log out</Button></div></div></div>}</div>
+function AppShell({ user, onLogout }: { user?: AuthUser | null; onLogout: () => void }) {
+  const [view, setView] = useState<View>('overview')
+  const [open, setOpen] = useState(false)
+  const [profileOpen, setProfileOpen] = useState(false)
+  const [logoutOpen, setLogoutOpen] = useState(false)
+  const [toast, setToast] = useState('')
+  const notify = (s: string) => {
+    setToast(s)
+    setTimeout(() => setToast(''), 3000)
+  }
+  const go = (v: View) => {
+    setView(v)
+    setOpen(false)
+    window.scrollTo(0, 0)
+  }
+  const title = useMemo(() => nav.find((x) => x[0] === view)?.[2] || 'Creator Hub', [view])
+
+  const displayName = user?.full_name || 'Priya Moves'
+  const initials =
+    displayName
+      .split(' ')
+      .filter(Boolean)
+      .map((x) => x[0])
+      .join('')
+      .slice(0, 2)
+      .toUpperCase() || 'PM'
+
+  let content: ReactNode
+  if (view === 'overview') content = <Overview go={go} user={user} />
+  else if (view === 'products') content = <Products go={go} toast={notify} />
+  else if (view === 'product-detail') content = <ProductDetail go={go} toast={notify} />
+  else if (view === 'campaigns') content = <Campaigns go={go} />
+  else if (view === 'campaign-detail') content = <CampaignDetail go={go} toast={notify} />
+  else if (view === 'my-campaigns') content = <MyCampaigns go={go} />
+  else if (view === 'links') content = <Links go={go} toast={notify} />
+  else if (view === 'link-analytics') content = <LinkAnalytics go={go} />
+  else if (view === 'storefront') content = <Storefront toast={notify} />
+  else if (view === 'orders') content = <Orders go={go} />
+  else if (view === 'order-detail') content = <OrderDetail go={go} />
+  else if (view === 'earnings' || view === 'wallet' || view === 'payouts')
+    content = <Wallet view={view} go={go} toast={notify} />
+  else if (view === 'notifications') content = <Notifications />
+  else if (view === 'profile' || view === 'settings')
+    content = <Profile view={view} go={go} toast={notify} />
+  else content = <Support toast={notify} />
+  return (
+    <div className="app-shell">
+      <aside className={`sidebar ${open ? 'open' : ''}`}>
+        <div className="side-head">
+          <Logo dark />
+          <button onClick={() => setOpen(false)}>
+            <Icon name="close" />
+          </button>
+        </div>
+        <nav>
+          {nav.map((x) => (
+            <button
+              className={
+                view === x[0] || (view.includes(x[0]) && x[0] !== 'overview') ? 'active' : ''
+              }
+              onClick={() => go(x[0])}
+              key={x[0]}
+            >
+              <Icon name={x[1]} size={18} />
+              <span>{x[2]}</span>
+              {x[0] === 'notifications' && <i>3</i>}
+            </button>
+          ))}
+        </nav>
+        <div className="side-bottom">
+          <div className="mini-profile">
+            <span>{initials}</span>
+            <div>
+              <b>{displayName}</b>
+              <small>Verified creator</small>
+            </div>
+            <button onClick={() => setLogoutOpen(true)}>•••</button>
+          </div>
+        </div>
+      </aside>
+      <div className="app-main">
+        <header className="topbar">
+          <button className="mobile-menu" onClick={() => setOpen(true)}>
+            <Icon name="menu" />
+          </button>
+          <span className="mobile-title">{title}</span>
+          <div className="top-search">
+            <Icon name="search" size={18} />
+            <input placeholder="Search anything…" />
+            <kbd>⌘ K</kbd>
+          </div>
+          <div className="top-actions">
+            <button onClick={() => go('support')}>
+              <Icon name="help" />
+            </button>
+            <button className="notification-button" onClick={() => go('notifications')}>
+              <Icon name="bell" />
+              <i />
+            </button>
+            <button className="top-profile" onClick={() => setProfileOpen(!profileOpen)}>
+              <span>{initials}</span>
+              <div>
+                <b>{displayName}</b>
+                <small>Verified creator</small>
+              </div>
+              <span>⌄</span>
+            </button>
+          </div>
+          {profileOpen && (
+            <div className="profile-menu">
+              <button onClick={() => go('profile')}>
+                <Icon name="user" /> My profile
+              </button>
+              <button onClick={() => go('settings')}>
+                <Icon name="settings" /> Account settings
+              </button>
+              <button onClick={() => go('wallet')}>
+                <Icon name="wallet" /> Wallet
+              </button>
+              <button onClick={() => go('support')}>
+                <Icon name="help" /> Help & support
+              </button>
+              <hr />
+              <button className="red" onClick={() => setLogoutOpen(true)}>
+                <Icon name="logout" /> Log out
+              </button>
+            </div>
+          )}
+        </header>
+        <main className="page-content">{content}</main>
+        <nav className="mobile-bottom">
+          {nav.slice(0, 4).map((x) => (
+            <button
+              className={view === x[0] ? 'active' : ''}
+              onClick={() => go(x[0])}
+              key={x[0]}
+            >
+              <Icon name={x[1]} />
+              <span>{x[2].split(' ')[0]}</span>
+            </button>
+          ))}
+          <button onClick={() => setOpen(true)}>
+            <Icon name="menu" />
+            <span>More</span>
+          </button>
+        </nav>
+      </div>
+      {open && <div className="nav-overlay" onClick={() => setOpen(false)} />}{' '}
+      {toast && (
+        <div className="toast">
+          <Icon name="check" />
+          <span>{toast}</span>
+          <button onClick={() => setToast('')}>
+            <Icon name="close" size={16} />
+          </button>
+        </div>
+      )}
+      {logoutOpen && (
+        <div className="modal-backdrop">
+          <div className="modal small">
+            <span className="logout-icon">
+              <Icon name="logout" />
+            </span>
+            <h2>Log out of WatsGo?</h2>
+            <p>You’ll need to sign in again to access your creator workspace.</p>
+            <div className="modal-actions">
+              <Button kind="secondary" onClick={() => setLogoutOpen(false)}>
+                Cancel
+              </Button>
+              <Button kind="danger" onClick={onLogout}>
+                Log out
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }
 
 export default function App() {
-  const [screen,setScreen]=useState<'landing'|'auth'|'onboarding'|'app'>('landing')
-  const [authMode,setAuthMode]=useState<'login'|'register'>('register')
-  if(screen==='landing') return <Landing onStart={()=>{setAuthMode('register');setScreen('auth')}} onLogin={()=>{setAuthMode('login');setScreen('auth')}}/>
-  if(screen==='auth') return <Auth mode={authMode} setMode={setAuthMode} onDone={()=>setScreen(authMode==='register'?'onboarding':'app')}/>
-  if(screen==='onboarding') return <Onboarding onDone={()=>setScreen('app')}/>
-  return <AppShell onLogout={()=>{setAuthMode('login');setScreen('auth')}}/>
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => getStoredUser())
+  const [screen, setScreen] = useState<'landing' | 'auth' | 'onboarding' | 'app'>(() => {
+    return getStoredUser() ? 'app' : 'landing'
+  })
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('register')
+
+  const handleAuthDone = (user?: AuthUser) => {
+    if (user) setCurrentUser(user)
+    if (authMode === 'register' && !user?.onboarding_completed) {
+      setScreen('onboarding')
+    } else {
+      setScreen('app')
+    }
+  }
+
+  const handleLogout = () => {
+    logout()
+    setCurrentUser(null)
+    setAuthMode('login')
+    setScreen('auth')
+  }
+
+  if (screen === 'landing')
+    return (
+      <Landing
+        onStart={() => {
+          setAuthMode('register')
+          setScreen('auth')
+        }}
+        onLogin={() => {
+          setAuthMode('login')
+          setScreen('auth')
+        }}
+      />
+    )
+  if (screen === 'auth')
+    return <Auth mode={authMode} setMode={setAuthMode} onDone={handleAuthDone} />
+  if (screen === 'onboarding') return <Onboarding onDone={() => setScreen('app')} />
+  return <AppShell user={currentUser} onLogout={handleLogout} />
 }

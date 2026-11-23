@@ -1,0 +1,141 @@
+/**
+ * Frontend Auth API Client for WatsGo Creator Hub.
+ * Connects frontend forms to:
+ * 1. POST /api/register
+ * 2. POST /api/login
+ * 3. POST /api/verify-otp
+ * 4. POST /api/resend-otp
+ * 5. GET  /api/me
+ */
+
+const API_BASE = import.meta.env.VITE_API_URL || '/api';
+
+export interface AuthUser {
+  id: number;
+  full_name: string;
+  email: string;
+  mobile_number: string;
+  role: string;
+  is_verified: boolean;
+  onboarding_completed?: boolean;
+}
+
+export interface AuthResponse {
+  success: boolean;
+  message?: string;
+  token?: string;
+  user?: AuthUser;
+  requires_otp?: boolean;
+  email?: string;
+  otp_preview?: string;
+}
+
+export async function registerCreator(data: {
+  full_name: string;
+  email: string;
+  mobile_number: string;
+  password: string;
+}): Promise<AuthResponse> {
+  const res = await fetch(`${API_BASE}/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  const json = await res.json();
+  if (!res.ok && !json.requires_otp) {
+    throw new Error(json.message || 'Registration failed.');
+  }
+  return json;
+}
+
+export async function loginCreator(data: {
+  email: string;
+  password: string;
+  remember_me?: boolean;
+}): Promise<AuthResponse> {
+  const res = await fetch(`${API_BASE}/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  const json = await res.json();
+  if (!res.ok && !json.requires_otp) {
+    throw new Error(json.message || 'Login failed.');
+  }
+  if (json.token) {
+    localStorage.setItem('watsgo_token', json.token);
+    if (json.user) {
+      localStorage.setItem('watsgo_user', JSON.stringify(json.user));
+    }
+  }
+  return json;
+}
+
+export async function verifyOtp(data: {
+  email: string;
+  otp_code: string;
+}): Promise<AuthResponse> {
+  const res = await fetch(`${API_BASE}/verify-otp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  const json = await res.json();
+  if (!res.ok) {
+    throw new Error(json.message || 'Verification failed.');
+  }
+  if (json.token) {
+    localStorage.setItem('watsgo_token', json.token);
+    if (json.user) {
+      localStorage.setItem('watsgo_user', JSON.stringify(json.user));
+    }
+  }
+  return json;
+}
+
+export async function resendOtp(email: string): Promise<AuthResponse> {
+  const res = await fetch(`${API_BASE}/resend-otp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  const json = await res.json();
+  if (!res.ok) {
+    throw new Error(json.message || 'Failed to resend code.');
+  }
+  return json;
+}
+
+export async function getMe(): Promise<{ success: boolean; user?: AuthUser } | null> {
+  const token = localStorage.getItem('watsgo_token');
+  if (!token) return null;
+  try {
+    const res = await fetch(`${API_BASE}/me`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    if (!res.ok) {
+      localStorage.removeItem('watsgo_token');
+      localStorage.removeItem('watsgo_user');
+      return null;
+    }
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+export function logout(): void {
+  localStorage.removeItem('watsgo_token');
+  localStorage.removeItem('watsgo_user');
+}
+
+export function getStoredUser(): AuthUser | null {
+  try {
+    const item = localStorage.getItem('watsgo_user');
+    return item ? JSON.parse(item) : null;
+  } catch {
+    return null;
+  }
+}

@@ -5,7 +5,114 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 import siteConfiguration from './.figma/make/site.json'
+import {
+  registerCreator,
+  loginCreator,
+  verifyOtpCode,
+  resendOtpCode,
+  getUserFromToken,
+} from './api/auth-service.js'
 
+function watsgoApiPlugin(): Plugin {
+  return {
+    name: 'watsgo-api-plugin',
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        if (!req.url || !req.url.startsWith('/api')) {
+          return next()
+        }
+        const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`)
+        const pathname = parsedUrl.pathname.replace(/\/$/, '')
+
+        const sendJson = (status: number, data: any) => {
+          res.statusCode = status
+          res.setHeader('Content-Type', 'application/json')
+          res.setHeader('Access-Control-Allow-Origin', '*')
+          res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+          res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+          res.end(JSON.stringify(data))
+        }
+
+        if (req.method === 'OPTIONS') {
+          res.statusCode = 204
+          res.setHeader('Access-Control-Allow-Origin', '*')
+          res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+          res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+          return res.end()
+        }
+
+        const parseBody = () =>
+          new Promise<any>((resolve, reject) => {
+            let body = ''
+            req.on('data', (chunk) => {
+              body += chunk
+            })
+            req.on('end', () => {
+              if (!body.trim()) return resolve({})
+              try {
+                resolve(JSON.parse(body))
+              } catch (e) {
+                reject(new Error('Invalid JSON'))
+              }
+            })
+            req.on('error', reject)
+          })
+
+        try {
+          if (pathname === '/api/register' && req.method === 'POST') {
+            const body = await parseBody()
+            const result = await registerCreator(body)
+            return sendJson(200, result)
+          }
+          if (pathname === '/api/login' && req.method === 'POST') {
+            const body = await parseBody()
+            const result = await loginCreator(body)
+            return sendJson(200, result)
+          }
+          if (pathname === '/api/verify-otp' && req.method === 'POST') {
+            const body = await parseBody()
+            const result = await verifyOtpCode(body)
+            return sendJson(200, result)
+          }
+          if (pathname === '/api/resend-otp' && req.method === 'POST') {
+            const body = await parseBody()
+            const result = await resendOtpCode(body)
+            return sendJson(200, result)
+          }
+          if (pathname === '/api/me' && req.method === 'GET') {
+            const authHeader = req.headers.authorization || ''
+            const token = authHeader.replace(/^Bearer\s+/i, '').trim()
+            const userSession = await getUserFromToken(token)
+            if (!userSession)
+              return sendJson(401, { success: false, message: 'Unauthorized session' })
+            return sendJson(200, { success: true, ...userSession })
+          }
+          return next()
+        } catch (err: any) {
+          return sendJson(400, { success: false, message: err.message || 'Error occurred' })
+        }
+      })
+    },
+  }
+}
+
+
+function copyNodeApiPlugin(): Plugin {
+  return {
+    name: 'copy-node-api-plugin',
+    closeBundle() {
+      try {
+        const distApiDir = path.resolve(__dirname, 'dist/api')
+        const srcApiDir = path.resolve(__dirname, 'api')
+        if (fs.existsSync(srcApiDir)) {
+          fs.cpSync(srcApiDir, distApiDir, { recursive: true })
+        }
+      } catch {
+        // Ignore if dist directory not ready
+      }
+    },
+  }
+}
 
 // Vite config — https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
@@ -19,7 +126,9 @@ export default defineConfig(({ mode }) => {
       minify: !emitSourcemaps,
     },
     plugins: [
-react(),
+      watsgoApiPlugin(),
+      copyNodeApiPlugin(),
+      react(),
       tailwindcss(),
       figmaSiteConfiguration(siteConfiguration),
       figmaErrorOverlayReplay(),
