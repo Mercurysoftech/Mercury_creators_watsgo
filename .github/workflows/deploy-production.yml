@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - production
+      - main
+      - jana_deploy_231126
   workflow_dispatch:
 
 concurrency:
@@ -14,32 +16,66 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy over SSH
-        uses: appleboy/ssh-action@v1.2.0
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.3
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build production bundle
         env:
-          DEPLOY_SHA: ${{ github.sha }}
+          VITE_BASE_PATH: /
           VITE_API_URL: ${{ vars.VITE_API_URL || secrets.VITE_API_URL || 'https://creators.watsgo.in/' }}
+          VITE_API_BASE_URL: ${{ vars.VITE_API_URL || secrets.VITE_API_URL || 'https://creators.watsgo.in/' }}
+        run: pnpm run build
+
+      - name: Prepare release directory on server
+        uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.STAGING_HOST }}
           username: ${{ secrets.STAGING_USER }}
           key: ${{ secrets.STAGING_SSH_KEY }}
           port: ${{ secrets.STAGING_PORT }}
-          envs: DEPLOY_SHA,VITE_API_URL
-          command_timeout: 30m
+          script: |
+            mkdir -p /home/mercurysoftech/web/creators.watsgo.in/.deploy-releases/${{ github.sha }}
+
+      - name: Upload build to server via SCP
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          port: ${{ secrets.STAGING_PORT }}
+          source: "dist/*"
+          target: "/home/mercurysoftech/web/creators.watsgo.in/.deploy-releases/${{ github.sha }}"
+          strip_components: 1
+
+      - name: Publish release to public_html
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          port: ${{ secrets.STAGING_PORT }}
           script: |
             set -eu
+            WEB_ROOT="/home/mercurysoftech/web/creators.watsgo.in/public_html"
+            RELEASE_DIR="/home/mercurysoftech/web/creators.watsgo.in/.deploy-releases/${{ github.sha }}"
 
-            WEB_ROOT=/home/mercurysoftech/web/creators.watsgo.in/public_html
-            RELEASE_DIR=/home/mercurysoftech/web/creators.watsgo.in/.deploy-releases/$DEPLOY_SHA
+            mkdir -p "$WEB_ROOT"
+            cp -a "$RELEASE_DIR/." "$WEB_ROOT/"
 
-            git -C "$WEB_ROOT" fetch origin production
-            git -C "$WEB_ROOT" cat-file -e "$DEPLOY_SHA^{commit}"
-            mkdir -p "$RELEASE_DIR"
-            git -C "$WEB_ROOT" archive "$DEPLOY_SHA" | tar -x -C "$RELEASE_DIR"
-
-
-            cd "$RELEASE_DIR"
-            npm ci
-            VITE_BASE_PATH=/ VITE_API_URL="$VITE_API_URL" VITE_API_BASE_URL="$VITE_API_URL" npm run build
-            cp -a dist/. "$WEB_ROOT/"
-            cp .htaccess "$WEB_ROOT/.htaccess"
+            # Clean up older releases, keeping the last 5
+            cd /home/mercurysoftech/web/creators.watsgo.in/.deploy-releases
+            ls -dt */ 2>/dev/null | tail -n +6 | xargs -r rm -rf
