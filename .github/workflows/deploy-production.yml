@@ -1,0 +1,45 @@
+name: Deploy Production
+
+on:
+  push:
+    branches:
+      - production
+  workflow_dispatch:
+
+concurrency:
+  group: creators-production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          DEPLOY_SHA: ${{ github.sha }}
+          VITE_API_URL: ${{ vars.VITE_API_URL || secrets.VITE_API_URL || 'https://creators.watsgo.in/' }}
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          port: ${{ secrets.STAGING_PORT }}
+          envs: DEPLOY_SHA,VITE_API_URL
+          command_timeout: 30m
+          script: |
+            set -eu
+
+            WEB_ROOT=/home/mercurysoftech/web/creators.watsgo.in/public_html
+            RELEASE_DIR=/home/mercurysoftech/web/creators.watsgo.in/.deploy-releases/$DEPLOY_SHA
+
+            git -C "$WEB_ROOT" fetch origin production
+            git -C "$WEB_ROOT" cat-file -e "$DEPLOY_SHA^{commit}"
+            mkdir -p "$RELEASE_DIR"
+            git -C "$WEB_ROOT" archive "$DEPLOY_SHA" | tar -x -C "$RELEASE_DIR"
+
+
+            cd "$RELEASE_DIR"
+            npm ci
+            VITE_BASE_PATH=/ VITE_API_URL="$VITE_API_URL" VITE_API_BASE_URL="$VITE_API_URL" npm run build
+            cp -a dist/. "$WEB_ROOT/"
+            cp .htaccess "$WEB_ROOT/.htaccess"
