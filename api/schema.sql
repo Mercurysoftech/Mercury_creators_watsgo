@@ -81,3 +81,14 @@ CREATE TABLE IF NOT EXISTS `creator_profiles` (
   UNIQUE KEY `idx_creator_profiles_user_id` (`user_id`),
   CONSTRAINT `fk_creator_profiles_user_id` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Sample seed user (Password: Password123!)
+INSERT INTO `users` (`id`, `full_name`, `email`, `mobile_number`, `password_hash`, `role`, `is_verified`, `status`)
+VALUES 
+(1, 'Priya Malhotra', 'priya@email.com', '9876543210', '7c69e4e80b6f776a64430400ca57d273a1324132673607eb45211711e4aad7a9a8861e01c1dfc84b0980ace416395ac10cd983a8394f878e4e3047ba04cbb8d0$7490d6997f8cac83279d00c33bc4b4a5', 'creator', 1, 'active')
+ON DUPLICATE KEY UPDATE `email`=`email`;
+
+INSERT INTO `creator_profiles` (`user_id`, `display_name`, `bio`, `country`, `city`, `preferred_language`, `niche_categories`, `audience_size`, `primary_platform`, `onboarding_completed`)
+VALUES
+(1, 'Priya Moves', 'Lifestyle, mindful travel and everyday wellness.', 'India', 'Mumbai', 'English', '["Lifestyle", "Travel"]', '100K – 250K', 'Instagram', 1)
+ON DUPLICATE KEY UPDATE `user_id`=`user_id`;

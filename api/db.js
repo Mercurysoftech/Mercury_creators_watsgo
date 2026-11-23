@@ -55,8 +55,8 @@ export const memoryStore = {
       full_name: 'Priya Malhotra',
       email: 'priya@email.com',
       mobile_number: '9876543210',
-      // Default demo hash
-      password_hash: '965a947517c5b61404179e8bf2806b007d4b47eb10fe6ebba770e53a3a96482e$f81d4fae7dec4bc6',
+      // Default demo hash (Password: Password123!)
+      password_hash: '7c69e4e80b6f776a64430400ca57d273a1324132673607eb45211711e4aad7a9a8861e01c1dfc84b0980ace416395ac10cd983a8394f878e4e3047ba04cbb8d0$7490d6997f8cac83279d00c33bc4b4a5',
       role: 'creator',
       is_verified: 1,
       status: 'active',
