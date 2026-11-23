@@ -79,3 +79,44 @@ jobs:
             # Clean up older releases, keeping the last 5
             cd /home/mercurysoftech/web/creators.watsgo.in/.deploy-releases
             ls -dt */ 2>/dev/null | tail -n +6 | xargs -r rm -rf
+
+      - name: Start or reload Node.js API with PM2
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          port: ${{ secrets.STAGING_PORT }}
+          script: |
+            set -eu
+
+            # Export Node, npm, and PM2 paths into SSH environment
+            export NVM_DIR="$HOME/.nvm"
+            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+            export PATH="$PATH:/usr/local/bin:$HOME/.local/bin:$HOME/.npm-global/bin:$HOME/bin"
+
+            WEB_ROOT="/home/mercurysoftech/web/creators.watsgo.in/public_html"
+            cd "$WEB_ROOT"
+
+            # Check if PM2 is available
+            if ! command -v pm2 > /dev/null 2>&1; then
+              echo "pm2 command not found in PATH. Attempting npm install -g pm2..."
+              npm install -g pm2 || true
+            fi
+
+            # Reload or start PM2 process with zero-downtime
+            if [ -f "ecosystem.config.cjs" ]; then
+              echo "Using ecosystem.config.cjs with PM2..."
+              pm2 startOrReload ecosystem.config.cjs --update-env || pm2 start api/server.js --name "watsgo-creators-api" --update-env
+            else
+              echo "Using api/server.js directly with PM2..."
+              if pm2 describe watsgo-creators-api > /dev/null 2>&1; then
+                pm2 reload watsgo-creators-api --update-env
+              else
+                pm2 start api/server.js --name "watsgo-creators-api" --update-env
+              fi
+            fi
+
+            # Save PM2 process list for auto-recovery on system reboot
+            pm2 save || true
+            pm2 status
