@@ -1,0 +1,10 @@
+{
+  "description": "A creator affiliate platform for discovering products, sharing trackable links, managing campaigns, and earning commissions with clear sales and payout insights.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
