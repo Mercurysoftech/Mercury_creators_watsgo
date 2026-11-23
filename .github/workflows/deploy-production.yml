@@ -94,7 +94,8 @@ jobs:
             export PATH="$PATH:/usr/local/bin:$HOME/.local/bin:$HOME/.npm-global/bin:$HOME/bin"
 
             WEB_ROOT="/home/mercurysoftech/web/creators.watsgo.in/public_html"
-            cd "$WEB_ROOT"
+            API_DIR="$WEB_ROOT/api"
+            cd "$API_DIR"
 
             # Check if PM2 is available
             if ! command -v pm2 > /dev/null 2>&1; then
@@ -102,17 +103,19 @@ jobs:
               npm install -g pm2 || true
             fi
 
-            # Reload or start PM2 process
-            if [ -f "ecosystem.config.cjs" ]; then
-              echo "Using ecosystem.config.cjs with PM2..."
-              pm2 startOrRestart ecosystem.config.cjs --update-env || pm2 start ecosystem.config.cjs
+            # If existing process was registered in cluster mode, delete it so it starts clean in fork mode
+            if pm2 describe watsgo-creators-api 2>&1 | grep -qi "cluster"; then
+              echo "Removing old cluster-mode process from PM2..."
+              pm2 delete watsgo-creators-api || true
+            fi
+
+            # Start or restart in fork mode
+            if pm2 describe watsgo-creators-api > /dev/null 2>&1; then
+              echo "Restarting existing PM2 process in fork mode..."
+              pm2 restart watsgo-creators-api --update-env
             else
-              echo "Using api/server.js directly with PM2..."
-              if pm2 describe watsgo-creators-api > /dev/null 2>&1; then
-                pm2 restart watsgo-creators-api --update-env
-              else
-                pm2 start api/server.js --name "watsgo-creators-api" --update-env
-              fi
+              echo "Starting PM2 process in fork mode..."
+              pm2 start server.js --name "watsgo-creators-api"
             fi
 
             # Save PM2 process list for auto-recovery on system reboot
