@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - production
-      - main
-      - jana_deploy_231126
   workflow_dispatch:
 
 concurrency:
