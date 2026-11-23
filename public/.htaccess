@@ -1,9 +1,20 @@
 <IfModule mod_rewrite.c>
   RewriteEngine On
   RewriteBase /
+
+  # Proxy /api requests to Node.js backend server (default: port 5000)
+  <IfModule mod_proxy.c>
+    RewriteRule ^api/(.*)$ http://127.0.0.1:5000/api/$1 [P,L]
+  </IfModule>
+
+  # Direct access to index.html bypasses rewrite
   RewriteRule ^index\.html$ - [L]
+
+  # All other existing files or directories served directly
   RewriteCond %{REQUEST_FILENAME} !-f
   RewriteCond %{REQUEST_FILENAME} !-d
   RewriteCond %{REQUEST_FILENAME} !-l
+
+  # Single Page Application fallback for React
   RewriteRule . /index.html [L]
 </IfModule>
