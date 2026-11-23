@@ -104,14 +104,14 @@ jobs:
               npm install -g pm2 || true
             fi
 
-            # Reload or start PM2 process with zero-downtime
+            # Reload or start PM2 process
             if [ -f "ecosystem.config.cjs" ]; then
               echo "Using ecosystem.config.cjs with PM2..."
-              pm2 startOrReload ecosystem.config.cjs --update-env || pm2 start api/server.js --name "watsgo-creators-api" --update-env
+              pm2 startOrRestart ecosystem.config.cjs --update-env || pm2 start ecosystem.config.cjs
             else
               echo "Using api/server.js directly with PM2..."
               if pm2 describe watsgo-creators-api > /dev/null 2>&1; then
-                pm2 reload watsgo-creators-api --update-env
+                pm2 restart watsgo-creators-api --update-env
               else
                 pm2 start api/server.js --name "watsgo-creators-api" --update-env
               fi
