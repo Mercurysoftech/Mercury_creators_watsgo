@@ -8,7 +8,19 @@
  * 5. GET  /api/me
  */
 
-const API_BASE = import.meta.env.VITE_API_URL || '/api';
+function getApiEndpoint(endpoint: string): string {
+  let base = (import.meta.env.VITE_API_URL || '/api').trim()
+  // Strip all trailing slashes
+  base = base.replace(/\/+$/, '')
+
+  // Ensure /api path is present (prevents https://creators.watsgo.in//register)
+  if (!base.endsWith('/api')) {
+    base = `${base}/api`
+  }
+
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`
+  return `${base}${cleanEndpoint}`
+}
 
 export interface AuthUser {
   id: number;
@@ -36,7 +48,7 @@ export async function registerCreator(data: {
   mobile_number: string;
   password: string;
 }): Promise<AuthResponse> {
-  const res = await fetch(`${API_BASE}/register`, {
+  const res = await fetch(getApiEndpoint('/register'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -53,7 +65,7 @@ export async function loginCreator(data: {
   password: string;
   remember_me?: boolean;
 }): Promise<AuthResponse> {
-  const res = await fetch(`${API_BASE}/login`, {
+  const res = await fetch(getApiEndpoint('/login'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -75,7 +87,7 @@ export async function verifyOtp(data: {
   email: string;
   otp_code: string;
 }): Promise<AuthResponse> {
-  const res = await fetch(`${API_BASE}/verify-otp`, {
+  const res = await fetch(getApiEndpoint('/verify-otp'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -94,7 +106,7 @@ export async function verifyOtp(data: {
 }
 
 export async function resendOtp(email: string): Promise<AuthResponse> {
-  const res = await fetch(`${API_BASE}/resend-otp`, {
+  const res = await fetch(getApiEndpoint('/resend-otp'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email }),
@@ -110,7 +122,7 @@ export async function getMe(): Promise<{ success: boolean; user?: AuthUser } | n
   const token = localStorage.getItem('watsgo_token');
   if (!token) return null;
   try {
-    const res = await fetch(`${API_BASE}/me`, {
+    const res = await fetch(getApiEndpoint('/me'), {
       headers: {
         Authorization: `Bearer ${token}`,
       },

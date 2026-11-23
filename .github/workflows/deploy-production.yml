@@ -36,8 +36,8 @@ jobs:
       - name: Build production bundle
         env:
           VITE_BASE_PATH: /
-          VITE_API_URL: ${{ vars.VITE_API_URL || secrets.VITE_API_URL || 'https://creators.watsgo.in/' }}
-          VITE_API_BASE_URL: ${{ vars.VITE_API_URL || secrets.VITE_API_URL || 'https://creators.watsgo.in/' }}
+          VITE_API_URL: ${{ vars.VITE_API_URL || secrets.VITE_API_URL || 'https://creators.watsgo.in/api' }}
+          VITE_API_BASE_URL: ${{ vars.VITE_API_URL || secrets.VITE_API_URL || 'https://creators.watsgo.in/api' }}
         run: pnpm run build
 
       - name: Prepare release directory on server
