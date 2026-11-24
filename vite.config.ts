@@ -10,6 +10,7 @@ import {
   loginCreator,
   verifyOtpCode,
   resendOtpCode,
+  sendMobileOtp,
   getUserFromToken,
 } from "./api/auth-service.js";
 
@@ -69,9 +70,19 @@ function watsgoApiPlugin(): Plugin {
             const result = await loginCreator(body);
             return sendJson(200, result);
           }
-          if (pathname === "/api/verify-otp" && req.method === "POST") {
+          if (
+            (pathname === "/api/verify-otp" ||
+              pathname === "/api/verify-mobile-otp" ||
+              pathname === "/api/verify-otp-register") &&
+            req.method === "POST"
+          ) {
             const body = await parseBody();
             const result = await verifyOtpCode(body);
+            return sendJson(200, result);
+          }
+          if (pathname === "/api/send-mobile-otp" && req.method === "POST") {
+            const body = await parseBody();
+            const result = await sendMobileOtp(body);
             return sendJson(200, result);
           }
           if (pathname === "/api/resend-otp" && req.method === "POST") {
