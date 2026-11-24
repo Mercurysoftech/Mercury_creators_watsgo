@@ -9,17 +9,17 @@
  */
 
 function getApiEndpoint(endpoint: string): string {
-  let base = (import.meta.env.VITE_API_URL || '/api').trim()
+  let base = (import.meta.env.VITE_API_URL || "/api").trim();
   // Strip all trailing slashes
-  base = base.replace(/\/+$/, '')
+  base = base.replace(/\/+$/, "");
 
   // Ensure /api path is present (prevents https://creators.watsgo.in//register)
-  if (!base.endsWith('/api')) {
-    base = `${base}/api`
+  if (!base.endsWith("/api")) {
+    base = `${base}/api`;
   }
 
-  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`
-  return `${base}${cleanEndpoint}`
+  const cleanEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
+  return `${base}${cleanEndpoint}`;
 }
 
 export interface AuthUser {
@@ -43,19 +43,19 @@ export interface AuthResponse {
 }
 
 export async function registerCreator(data: {
-  full_name: string;
+  full_name?: string;
   email: string;
   mobile_number: string;
   password: string;
 }): Promise<AuthResponse> {
-  const res = await fetch(getApiEndpoint('/register'), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+  const res = await fetch(getApiEndpoint("/register"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
   const json = await res.json();
   if (!res.ok && !json.requires_otp) {
-    throw new Error(json.message || 'Registration failed.');
+    throw new Error(json.message || "Registration failed.");
   }
   return json;
 }
@@ -65,71 +65,68 @@ export async function loginCreator(data: {
   password: string;
   remember_me?: boolean;
 }): Promise<AuthResponse> {
-  const res = await fetch(getApiEndpoint('/login'), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+  const res = await fetch(getApiEndpoint("/login"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
   const json = await res.json();
   if (!res.ok && !json.requires_otp) {
-    throw new Error(json.message || 'Login failed.');
+    throw new Error(json.message || "Login failed.");
   }
   if (json.token) {
-    localStorage.setItem('watsgo_token', json.token);
+    localStorage.setItem("watsgo_token", json.token);
     if (json.user) {
-      localStorage.setItem('watsgo_user', JSON.stringify(json.user));
+      localStorage.setItem("watsgo_user", JSON.stringify(json.user));
     }
   }
   return json;
 }
 
-export async function verifyOtp(data: {
-  email: string;
-  otp_code: string;
-}): Promise<AuthResponse> {
-  const res = await fetch(getApiEndpoint('/verify-otp'), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+export async function verifyOtp(data: { email: string; otp_code: string }): Promise<AuthResponse> {
+  const res = await fetch(getApiEndpoint("/verify-otp"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
   const json = await res.json();
   if (!res.ok) {
-    throw new Error(json.message || 'Verification failed.');
+    throw new Error(json.message || "Verification failed.");
   }
   if (json.token) {
-    localStorage.setItem('watsgo_token', json.token);
+    localStorage.setItem("watsgo_token", json.token);
     if (json.user) {
-      localStorage.setItem('watsgo_user', JSON.stringify(json.user));
+      localStorage.setItem("watsgo_user", JSON.stringify(json.user));
     }
   }
   return json;
 }
 
 export async function resendOtp(email: string): Promise<AuthResponse> {
-  const res = await fetch(getApiEndpoint('/resend-otp'), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+  const res = await fetch(getApiEndpoint("/resend-otp"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email }),
   });
   const json = await res.json();
   if (!res.ok) {
-    throw new Error(json.message || 'Failed to resend code.');
+    throw new Error(json.message || "Failed to resend code.");
   }
   return json;
 }
 
 export async function getMe(): Promise<{ success: boolean; user?: AuthUser } | null> {
-  const token = localStorage.getItem('watsgo_token');
+  const token = localStorage.getItem("watsgo_token");
   if (!token) return null;
   try {
-    const res = await fetch(getApiEndpoint('/me'), {
+    const res = await fetch(getApiEndpoint("/me"), {
       headers: {
         Authorization: `Bearer ${token}`,
       },
     });
     if (!res.ok) {
-      localStorage.removeItem('watsgo_token');
-      localStorage.removeItem('watsgo_user');
+      localStorage.removeItem("watsgo_token");
+      localStorage.removeItem("watsgo_user");
       return null;
     }
     return await res.json();
@@ -139,13 +136,13 @@ export async function getMe(): Promise<{ success: boolean; user?: AuthUser } | n
 }
 
 export function logout(): void {
-  localStorage.removeItem('watsgo_token');
-  localStorage.removeItem('watsgo_user');
+  localStorage.removeItem("watsgo_token");
+  localStorage.removeItem("watsgo_user");
 }
 
 export function getStoredUser(): AuthUser | null {
   try {
-    const item = localStorage.getItem('watsgo_user');
+    const item = localStorage.getItem("watsgo_user");
     return item ? JSON.parse(item) : null;
   } catch {
     return null;

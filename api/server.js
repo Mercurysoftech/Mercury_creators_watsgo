@@ -9,108 +9,109 @@
  * 6. GET  /api/health
  */
 
-import http from 'node:http';
+import http from "node:http";
 import {
   registerCreator,
   loginCreator,
   verifyOtpCode,
   resendOtpCode,
-  getUserFromToken
-} from './auth-service.js';
+  getUserFromToken,
+} from "./auth-service.js";
 
-const PORT = parseInt(process.env.API_PORT || process.env.PORT || '5000', 10);
+const PORT = parseInt(process.env.API_PORT || process.env.PORT || "5000", 10);
 
 function sendJson(res, statusCode, data) {
   res.writeHead(statusCode, {
-    'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS, PUT, DELETE',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With'
+    "Content-Type": "application/json",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS, PUT, DELETE",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With",
   });
   res.end(JSON.stringify(data));
 }
 
 function parseJsonBody(req) {
   return new Promise((resolve, reject) => {
-    let body = '';
-    req.on('data', chunk => {
+    let body = "";
+    req.on("data", (chunk) => {
       body += chunk;
-      if (body.length > 1e6) { // 1MB limit
+      if (body.length > 1e6) {
+        // 1MB limit
         req.destroy();
-        reject(new Error('Payload too large'));
+        reject(new Error("Payload too large"));
       }
     });
-    req.on('end', () => {
+    req.on("end", () => {
       if (!body.trim()) return resolve({});
       try {
         resolve(JSON.parse(body));
       } catch (err) {
-        reject(new Error('Invalid JSON'));
+        reject(new Error("Invalid JSON"));
       }
     });
-    req.on('error', reject);
+    req.on("error", reject);
   });
 }
 
 export const server = http.createServer(async (req, res) => {
   // Handle CORS Preflight
-  if (req.method === 'OPTIONS') {
+  if (req.method === "OPTIONS") {
     res.writeHead(204, {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS, PUT, DELETE',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With'
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, POST, OPTIONS, PUT, DELETE",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With",
     });
     return res.end();
   }
 
-  const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
-  const pathname = url.pathname.replace(/\/$/, '') || '/';
+  const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
+  const pathname = url.pathname.replace(/\/$/, "") || "/";
 
   try {
     // 1. Health check
-    if (pathname === '/api/health' || pathname === '/health') {
+    if (pathname === "/api/health" || pathname === "/health") {
       return sendJson(res, 200, {
-        status: 'ok',
-        service: 'WatsGo Creator Hub API',
-        timestamp: new Date().toISOString()
+        status: "ok",
+        service: "WatsGo Creator Hub API",
+        timestamp: new Date().toISOString(),
       });
     }
 
     // 2. API 1: Register
-    if (pathname === '/api/register' && req.method === 'POST') {
+    if (pathname === "/api/register" && req.method === "POST") {
       const body = await parseJsonBody(req);
       const result = await registerCreator(body);
       return sendJson(res, 200, result);
     }
 
     // 3. API 2: Login
-    if (pathname === '/api/login' && req.method === 'POST') {
+    if (pathname === "/api/login" && req.method === "POST") {
       const body = await parseJsonBody(req);
       const result = await loginCreator(body);
       return sendJson(res, 200, result);
     }
 
     // 4. API 3: Verify OTP
-    if (pathname === '/api/verify-otp' && req.method === 'POST') {
+    if (pathname === "/api/verify-otp" && req.method === "POST") {
       const body = await parseJsonBody(req);
       const result = await verifyOtpCode(body);
       return sendJson(res, 200, result);
     }
 
     // 5. Resend OTP
-    if (pathname === '/api/resend-otp' && req.method === 'POST') {
+    if (pathname === "/api/resend-otp" && req.method === "POST") {
       const body = await parseJsonBody(req);
       const result = await resendOtpCode(body);
       return sendJson(res, 200, result);
     }
 
     // 6. User info from session token (/api/me)
-    if (pathname === '/api/me' && req.method === 'GET') {
-      const authHeader = req.headers.authorization || '';
-      const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+    if (pathname === "/api/me" && req.method === "GET") {
+      const authHeader = req.headers.authorization || "";
+      const token = authHeader.replace(/^Bearer\s+/i, "").trim();
       const userSession = await getUserFromToken(token);
       if (!userSession) {
-        return sendJson(res, 401, { success: false, message: 'Unauthorized session' });
+        return sendJson(res, 401, { success: false, message: "Unauthorized session" });
       }
       return sendJson(res, 200, { success: true, ...userSession });
     }
@@ -121,14 +122,14 @@ export const server = http.createServer(async (req, res) => {
     console.error(`[API ERROR] ${pathname}:`, error.message);
     return sendJson(res, 400, {
       success: false,
-      message: error.message || 'An unexpected error occurred.'
+      message: error.message || "An unexpected error occurred.",
     });
   }
 });
 
 // Run if called directly
-if (process.argv[1] && process.argv[1].endsWith('server.js')) {
-  server.listen(PORT, '0.0.0.0', () => {
+if (process.argv[1] && process.argv[1].endsWith("server.js")) {
+  server.listen(PORT, "0.0.0.0", () => {
     console.log(`🚀 WatsGo Creator Hub API running on http://localhost:${PORT}`);
     console.log(`   - POST /api/register`);
     console.log(`   - POST /api/login`);
