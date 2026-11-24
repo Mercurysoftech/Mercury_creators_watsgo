@@ -435,13 +435,13 @@ function Auth({
   const [otp, setOtp] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [mobile, setMobile] = useState("9876543210");
-  const [email, setEmail] = useState("priya@email.com");
-  const [password, setPassword] = useState("Password123!");
-  const [confirmPassword, setConfirmPassword] = useState("Password123!");
-  const [rememberMe, setRememberMe] = useState(true);
-  const [agreeTerms, setAgreeTerms] = useState(true);
-  const [otpDigits, setOtpDigits] = useState(["4", "8", "2", "7", "1", "6"]);
+  const [mobile, setMobile] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
+  const [agreeTerms, setAgreeTerms] = useState(false);
+  const [otpDigits, setOtpDigits] = useState(["", "", "", "", "", ""]);
   const [otpPreview, setOtpPreview] = useState("");
   const [countdown, setCountdown] = useState(30);
 
