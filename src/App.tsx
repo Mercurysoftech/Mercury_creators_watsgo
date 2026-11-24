@@ -441,7 +441,7 @@ function Auth({
   const [confirmPassword, setConfirmPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
   const [agreeTerms, setAgreeTerms] = useState(false);
-  const [otpDigits, setOtpDigits] = useState(["", "", "", "", "", ""]);
+  const [otpDigits, setOtpDigits] = useState(["", "", "", ""]);
   const [otpPreview, setOtpPreview] = useState("");
   const [countdown, setCountdown] = useState(30);
 
@@ -520,7 +520,9 @@ function Auth({
       if (res.requires_otp) {
         if (res.otp_preview) {
           setOtpPreview(res.otp_preview);
-          setOtpDigits(res.otp_preview.split(""));
+          setOtpDigits(res.otp_preview.slice(0, 4).split(""));
+        } else {
+          setOtpDigits(["", "", "", ""]);
         }
         setOtp(true);
         setCountdown(30);
@@ -545,7 +547,9 @@ function Auth({
       if (res.requires_otp) {
         if (res.otp_preview) {
           setOtpPreview(res.otp_preview);
-          setOtpDigits(res.otp_preview.split(""));
+          setOtpDigits(res.otp_preview.slice(0, 4).split(""));
+        } else {
+          setOtpDigits(["", "", "", ""]);
         }
         setOtp(true);
         setCountdown(30);
@@ -561,14 +565,15 @@ function Auth({
   const handleVerifySubmit = async () => {
     setError("");
     const code = otpDigits.join("");
-    if (code.length !== 6) {
-      setError("Please enter the full 6-digit OTP code.");
+    if (code.length !== 4) {
+      setError("Please enter the full 4-digit OTP code.");
       return;
     }
     setLoading(true);
     try {
       const res = await verifyOtp({
         email,
+        mobile_number: mobile,
         otp_code: code,
       });
       setLoading(false);
@@ -585,10 +590,10 @@ function Auth({
     if (countdown > 0) return;
     setError("");
     try {
-      const res = await resendOtp(email);
+      const res = await resendOtp({ email, mobile_number: mobile });
       if (res.otp_preview) {
         setOtpPreview(res.otp_preview);
-        setOtpDigits(res.otp_preview.split(""));
+        setOtpDigits(res.otp_preview.slice(0, 4).split(""));
       }
       setCountdown(30);
     } catch (err: any) {
@@ -597,13 +602,20 @@ function Auth({
   };
 
   const handleOtpDigit = (idx: number, val: string) => {
-    const digit = val.slice(-1);
+    const digit = val.replace(/\D/g, "").slice(-1);
     const copy = [...otpDigits];
     copy[idx] = digit;
     setOtpDigits(copy);
-    if (digit && idx < 5) {
+    if (digit && idx < 3) {
       const nextEl = document.getElementById(`otp-box-${idx + 1}`);
       nextEl?.focus();
+    }
+  };
+
+  const handleOtpKeyDown = (idx: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Backspace" && !otpDigits[idx] && idx > 0) {
+      const prevEl = document.getElementById(`otp-box-${idx - 1}`);
+      prevEl?.focus();
     }
   };
 
@@ -636,9 +648,9 @@ function Auth({
             <div className="auth-icon">
               <Icon name="bell" />
             </div>
-            <h2>Check your inbox</h2>
+            <h2>Verify Mobile Number</h2>
             <p>
-              We sent a 6-digit verification code to <b>{email}</b>
+              We sent a 4-digit verification code via SMS to <b>+91 {mobile || "your phone"}</b>
             </p>
 
             {otpPreview && (
@@ -673,14 +685,19 @@ function Auth({
               </div>
             )}
 
-            <div className="otp-row">
+            <div className="otp-row" style={{ justifyContent: "center" }}>
               {otpDigits.map((x, i) => (
                 <input
                   key={i}
                   id={`otp-box-${i}`}
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
                   value={x}
                   onChange={(e) => handleOtpDigit(i, e.target.value)}
+                  onKeyDown={(e) => handleOtpKeyDown(i, e)}
                   maxLength={1}
+                  autoFocus={i === 0}
                 />
               ))}
             </div>
@@ -702,7 +719,7 @@ function Auth({
               >
                 {countdown > 0
                   ? `Resend in 00:${countdown < 10 ? "0" : ""}${countdown}`
-                  : "Resend OTP"}
+                  : "Resend OTP via SMS"}
               </button>
             </small>
           </div>

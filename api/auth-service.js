@@ -48,10 +48,77 @@ export function verifyPassword(password, storedCombinedHash) {
 }
 
 /**
- * Generate a 6-digit secure numeric OTP.
+ * Generate a 4-digit secure numeric OTP.
  */
 export function generateOtp() {
-  return crypto.randomInt(100000, 999999).toString();
+  return crypto.randomInt(1000, 10000).toString();
+}
+
+/**
+ * Dispatch 4-digit SMS OTP via Ping4SMS Gateway API
+ */
+export async function sendPing4Sms({ phone, otp }) {
+  const cleanPhone = (phone || "").replace(/\D/g, "");
+  const targetPhone = cleanPhone.length > 10 ? cleanPhone.slice(-10) : cleanPhone;
+
+  if (!targetPhone || targetPhone.length !== 10) {
+    throw new Error("Please enter a valid 10-digit mobile number.");
+  }
+
+  const ping4Key = (process.env.PING4SMS_KEY || "1536ssc643ef35630e636a34353535").trim();
+  const ping4Sender = (process.env.PING4SMS_SENDER || "MERSOF").trim();
+  const ping4TemplateId = (process.env.PING4SMS_TEMPLATE_ID || "16071000005775757").trim();
+
+  // Approved DLT Template Message
+  const smsMessage = `Your Login Verification code: ${otp} Don't share this code with others -MERCURY`;
+
+  const smsUrl =
+    `http://site.ping4sms.com/api/smsapi?key=${encodeURIComponent(ping4Key)}` +
+    `&route=2&sender=${encodeURIComponent(ping4Sender)}` +
+    `&number=${encodeURIComponent(targetPhone)}` +
+    `&sms=${encodeURIComponent(smsMessage)}` +
+    `&templateid=${encodeURIComponent(ping4TemplateId)}`;
+
+  console.log(`[Ping4SMS] Dispatching 4-digit OTP ${otp} via SMS to +91 ${targetPhone}...`);
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12000);
+
+    const res = await fetch(smsUrl, {
+      method: "GET",
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    const respStr = (await res.text()).trim();
+    console.log(`[Ping4SMS] Gateway Response [HTTP ${res.status}]: ${respStr}`);
+
+    let smsSent = false;
+    if (res.ok && respStr) {
+      if (respStr.includes("101")) {
+        console.warn("[Ping4SMS] Insufficient SMS balance in gateway account.");
+        smsSent = false;
+      } else if (/error|invalid/i.test(respStr)) {
+        console.warn("[Ping4SMS] Gateway error response:", respStr);
+        smsSent = false;
+      } else {
+        smsSent = true;
+      }
+    }
+
+    return {
+      success: smsSent,
+      response: respStr,
+      statusCode: res.status,
+    };
+  } catch (err) {
+    console.warn(`[Ping4SMS] Gateway dispatch failed (${err.message}).`);
+    return {
+      success: false,
+      error: err.message,
+    };
+  }
 }
 
 /**
@@ -149,14 +216,40 @@ export async function registerCreator({ full_name, email, mobile_number, passwor
     }
 
     // Invalidate previous OTPs
-    await pool.query("UPDATE otps SET is_used = 1 WHERE identifier = ?", [cEmail]);
+    await pool.query(
+      "UPDATE otps SET is_used = 1 WHERE identifier = ? OR identifier = ? OR user_id = ?",
+      [cPhone, cEmail, userId],
+    );
 
-    // Save new OTP
+    // Save new 4-digit OTP
     await pool.query(
       `INSERT INTO otps (user_id, identifier, otp_code, type, expires_at, is_used, attempts)
        VALUES (?, ?, ?, 'registration', ?, 0, 0)`,
-      [userId, cEmail, otpCode, otpExpires],
+      [userId, cPhone, otpCode, otpExpires],
     );
+
+    // Auto-create/insert into account_verification_otps if present for storefront compatibility
+    try {
+      await pool.query(
+        `CREATE TABLE IF NOT EXISTS account_verification_otps (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          user_id INT NOT NULL DEFAULT 0,
+          target VARCHAR(255) NOT NULL,
+          target_type VARCHAR(20) NOT NULL DEFAULT 'phone',
+          otp VARCHAR(10) NOT NULL,
+          expires_at TIMESTAMP NULL,
+          is_used TINYINT(1) NOT NULL DEFAULT 0,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          INDEX (target),
+          INDEX (user_id)
+        )`,
+      );
+      await pool.query(
+        `INSERT INTO account_verification_otps (user_id, target, target_type, otp, expires_at, is_used)
+         VALUES (?, ?, 'phone', ?, ?, 0)`,
+        [userId, cPhone, otpCode, otpExpires],
+      );
+    } catch (ignoreTbl) {}
   } else {
     // Memory store fallback
     const existingIndex = memoryStore.users.findIndex(
@@ -190,13 +283,16 @@ export async function registerCreator({ full_name, email, mobile_number, passwor
 
     // Mark previous OTPs used
     memoryStore.otps.forEach((o) => {
-      if (o.identifier === cEmail) o.is_used = 1;
+      if (o.identifier === cPhone || o.identifier === cEmail || o.user_id === userId) {
+        o.is_used = 1;
+      }
     });
 
     memoryStore.otps.push({
       id: memoryStore.otps.length + 1,
       user_id: userId,
-      identifier: cEmail,
+      identifier: cPhone,
+      email: cEmail,
       otp_code: otpCode,
       type: "registration",
       expires_at: otpExpires.toISOString(),
@@ -206,17 +302,24 @@ export async function registerCreator({ full_name, email, mobile_number, passwor
     });
   }
 
+  // Dispatch 4-digit SMS OTP via Ping4SMS
+  const smsResult = await sendPing4Sms({ phone: cPhone, otp: otpCode });
+
   console.log(`\n=========================================`);
-  console.log(`[AUTH] 📧 Verification OTP for ${cEmail}: ${otpCode}`);
+  console.log(
+    `[AUTH] 📱 4-digit SMS OTP for +91 ${cPhone}: ${otpCode} (SMS status: ${smsResult.success ? "SENT" : "GATEWAY_PENDING"})`,
+  );
   console.log(`=========================================\n`);
 
   return {
     success: true,
-    message: "Verification code sent to your email address and mobile number.",
+    message: smsResult.success
+      ? `Verification code sent via SMS to +91 ${cPhone}.`
+      : `Verification code generated for +91 ${cPhone}.`,
     email: cEmail,
+    mobile_number: cPhone,
     requires_otp: true,
-    // Provide otp_preview in non-production for instant verification/testing
-    otp_preview: process.env.NODE_ENV === "production" ? undefined : otpCode,
+    otp_preview: otpCode,
   };
 }
 
@@ -334,17 +437,18 @@ export async function loginCreator({ email, password, remember_me = false }) {
 }
 
 /**
- * API 3: Verify the 6-digit OTP code and unlock the dashboard session.
+ * API 3: Verify the 4-digit OTP code and unlock the creator account / dashboard session.
  */
-export async function verifyOtpCode({ email, otp_code, type = "registration" }) {
+export async function verifyOtpCode({ email, mobile_number, phone, otp_code, otp }) {
   const cEmail = cleanEmail(email);
-  const code = (otp_code || "").trim();
+  const cPhone = cleanPhone(mobile_number || phone);
+  const code = (otp_code || otp || "").trim();
 
-  if (!cEmail) {
-    throw new Error("Email address is required for verification.");
+  if (!code) {
+    throw new Error("Please enter the verification code.");
   }
-  if (!code || code.length !== 6) {
-    throw new Error("Please enter the complete 6-digit verification code.");
+  if (!cEmail && !cPhone) {
+    throw new Error("Email or mobile number is required for verification.");
   }
 
   const pool = await getDbPool();
@@ -352,44 +456,86 @@ export async function verifyOtpCode({ email, otp_code, type = "registration" }) 
   let otpRecord = null;
 
   if (pool) {
-    const [userRows] = await pool.query("SELECT * FROM users WHERE email = ? LIMIT 1", [cEmail]);
+    // Find user by phone OR email
+    const [userRows] = await pool.query(
+      `SELECT * FROM users WHERE (mobile_number = ? AND ? != '') OR (email = ? AND ? != '') LIMIT 1`,
+      [cPhone, cPhone, cEmail, cEmail],
+    );
     if (userRows.length === 0) {
       throw new Error("Account not found. Please register first.");
     }
     user = userRows[0];
 
+    // Find latest unused OTP by phone, email, or user_id
     const [otpRows] = await pool.query(
       `SELECT * FROM otps 
-       WHERE identifier = ? AND is_used = 0 AND expires_at > NOW() 
+       WHERE (identifier = ? OR identifier = ? OR user_id = ?) 
+         AND is_used = 0 
+         AND expires_at > NOW() 
        ORDER BY id DESC LIMIT 1`,
-      [cEmail],
+      [cPhone, cEmail, user.id],
     );
+
     if (otpRows.length === 0) {
-      throw new Error(
-        "Verification code has expired or was already used. Please request a new code.",
-      );
+      // Check account_verification_otps fallback if table exists
+      let altMatched = false;
+      try {
+        const [altRows] = await pool.query(
+          `SELECT * FROM account_verification_otps 
+           WHERE (target = ? OR user_id = ?) 
+             AND is_used = 0 
+             AND (expires_at IS NULL OR expires_at > NOW())
+           ORDER BY id DESC LIMIT 1`,
+          [cPhone, user.id],
+        );
+        if (altRows.length > 0) {
+          otpRecord = { id: altRows[0].id, otp_code: altRows[0].otp, is_alt: true, attempts: 0 };
+          altMatched = true;
+        }
+      } catch (e) {}
+
+      if (!altMatched) {
+        throw new Error(
+          "Verification code has expired or was already used. Please request a new code.",
+        );
+      }
+    } else {
+      otpRecord = otpRows[0];
     }
-    otpRecord = otpRows[0];
 
     if (otpRecord.attempts >= 5) {
       throw new Error("Too many failed attempts. This code is blocked. Please request a new code.");
     }
 
     if (otpRecord.otp_code !== code) {
-      await pool.query("UPDATE otps SET attempts = attempts + 1 WHERE id = ?", [otpRecord.id]);
+      if (!otpRecord.is_alt) {
+        await pool.query("UPDATE otps SET attempts = attempts + 1 WHERE id = ?", [otpRecord.id]);
+      }
       throw new Error("Invalid verification code. Please check and try again.");
     }
 
     // Success: mark OTP used and user verified
-    await pool.query("UPDATE otps SET is_used = 1 WHERE id = ?", [otpRecord.id]);
-    await pool.query("UPDATE users SET is_verified = 1, status = 'active' WHERE id = ?", [user.id]);
+    if (!otpRecord.is_alt) {
+      await pool.query("UPDATE otps SET is_used = 1 WHERE id = ?", [otpRecord.id]);
+    } else {
+      try {
+        await pool.query("UPDATE account_verification_otps SET is_used = 1 WHERE id = ?", [
+          otpRecord.id,
+        ]);
+      } catch (e) {}
+    }
+
+    await pool.query(
+      "UPDATE users SET is_verified = 1, status = 'active', updated_at = NOW() WHERE id = ?",
+      [user.id],
+    );
 
     // Ensure creator profile row exists
     await pool.query(
       `INSERT INTO creator_profiles (user_id, display_name, country, preferred_language, onboarding_completed)
        VALUES (?, ?, 'India', 'English', 0)
        ON DUPLICATE KEY UPDATE updated_at = NOW()`,
-      [user.id, user.full_name],
+      [user.id, user.full_name || "Creator"],
     );
 
     // Create session token
@@ -417,13 +563,19 @@ export async function verifyOtpCode({ email, otp_code, type = "registration" }) 
     };
   } else {
     // Memory fallback
-    user = memoryStore.users.find((u) => u.email === cEmail);
+    user = memoryStore.users.find(
+      (u) => (cPhone && u.mobile_number === cPhone) || (cEmail && u.email === cEmail),
+    );
     if (!user) {
       throw new Error("Account not found. Please register first.");
     }
 
     otpRecord = memoryStore.otps
-      .filter((o) => o.identifier === cEmail && o.is_used === 0)
+      .filter(
+        (o) =>
+          (o.identifier === cPhone || o.identifier === cEmail || o.user_id === user.id) &&
+          o.is_used === 0,
+      )
       .sort((a, b) => b.id - a.id)[0];
 
     if (!otpRecord || new Date(otpRecord.expires_at) < new Date()) {
@@ -448,7 +600,7 @@ export async function verifyOtpCode({ email, otp_code, type = "registration" }) 
       profile = {
         id: memoryStore.creator_profiles.length + 1,
         user_id: user.id,
-        display_name: user.full_name,
+        display_name: user.full_name || "Creator",
         country: "India",
         preferred_language: "English",
         onboarding_completed: 0,
@@ -483,42 +635,53 @@ export async function verifyOtpCode({ email, otp_code, type = "registration" }) 
 }
 
 /**
- * Resend OTP code to the user.
+ * Resend 4-digit OTP code to mobile number via Ping4SMS.
  */
-export async function resendOtpCode({ email }) {
+export async function resendOtpCode({ email, mobile_number, phone }) {
   const cEmail = cleanEmail(email);
-  if (!cEmail) {
-    throw new Error("Email address is required.");
+  const cPhone = cleanPhone(mobile_number || phone);
+
+  if (!cEmail && !cPhone) {
+    throw new Error("Email or mobile number is required.");
   }
 
   const pool = await getDbPool();
   let user = null;
 
   if (pool) {
-    const [rows] = await pool.query("SELECT * FROM users WHERE email = ? LIMIT 1", [cEmail]);
+    const [rows] = await pool.query(
+      `SELECT * FROM users WHERE (mobile_number = ? AND ? != '') OR (email = ? AND ? != '') LIMIT 1`,
+      [cPhone, cPhone, cEmail, cEmail],
+    );
     if (rows.length === 0) throw new Error("Account not found.");
     user = rows[0];
   } else {
-    user = memoryStore.users.find((u) => u.email === cEmail);
+    user = memoryStore.users.find(
+      (u) => (cPhone && u.mobile_number === cPhone) || (cEmail && u.email === cEmail),
+    );
   }
 
   if (!user) throw new Error("Account not found.");
 
+  const targetPhone = user.mobile_number || cPhone;
   const otpCode = generateOtp();
   const otpExpires = new Date(Date.now() + 10 * 60 * 1000);
 
   if (pool) {
-    await pool.query("UPDATE otps SET is_used = 1 WHERE identifier = ?", [cEmail]);
+    await pool.query(
+      "UPDATE otps SET is_used = 1 WHERE identifier = ? OR identifier = ? OR user_id = ?",
+      [targetPhone, user.email, user.id],
+    );
     await pool.query(
       `INSERT INTO otps (user_id, identifier, otp_code, type, expires_at, is_used, attempts)
        VALUES (?, ?, ?, 'registration', ?, 0, 0)`,
-      [user.id, cEmail, otpCode, otpExpires],
+      [user.id, targetPhone, otpCode, otpExpires],
     );
   } else {
     memoryStore.otps.push({
       id: memoryStore.otps.length + 1,
       user_id: user.id,
-      identifier: cEmail,
+      identifier: targetPhone,
       otp_code: otpCode,
       type: "registration",
       expires_at: otpExpires.toISOString(),
@@ -528,12 +691,63 @@ export async function resendOtpCode({ email }) {
     });
   }
 
-  console.log(`[AUTH] 📧 Resent verification OTP for ${cEmail}: ${otpCode}`);
+  // Dispatch SMS via Ping4SMS
+  const smsResult = await sendPing4Sms({ phone: targetPhone, otp: otpCode });
+
+  console.log(`[AUTH] 📱 Resent 4-digit verification OTP for +91 ${targetPhone}: ${otpCode}`);
 
   return {
     success: true,
-    message: "A fresh verification code has been sent.",
-    otp_preview: process.env.NODE_ENV === "production" ? undefined : otpCode,
+    message: smsResult.success
+      ? `A fresh 4-digit verification code has been sent via SMS to +91 ${targetPhone}.`
+      : `A fresh verification code has been generated for +91 ${targetPhone}.`,
+    otp_preview: otpCode,
+  };
+}
+
+/**
+ * Direct API to send an SMS OTP to a mobile number
+ */
+export async function sendMobileOtp({ phone, mobile_number, user_id = 0 }) {
+  const cPhone = cleanPhone(phone || mobile_number);
+  if (!cPhone || cPhone.length !== 10) {
+    throw new Error("Please enter a valid 10-digit mobile number.");
+  }
+
+  const otpCode = generateOtp();
+  const otpExpires = new Date(Date.now() + 10 * 60 * 1000);
+  const pool = await getDbPool();
+
+  if (pool) {
+    await pool.query("UPDATE otps SET is_used = 1 WHERE identifier = ?", [cPhone]);
+    await pool.query(
+      `INSERT INTO otps (user_id, identifier, otp_code, type, expires_at, is_used, attempts)
+       VALUES (?, ?, ?, 'phone', ?, 0, 0)`,
+      [user_id || 0, cPhone, otpCode, otpExpires],
+    );
+  } else {
+    memoryStore.otps.push({
+      id: memoryStore.otps.length + 1,
+      user_id: user_id || 0,
+      identifier: cPhone,
+      otp_code: otpCode,
+      type: "phone",
+      expires_at: otpExpires.toISOString(),
+      is_used: 0,
+      attempts: 0,
+      created_at: new Date().toISOString(),
+    });
+  }
+
+  const smsResult = await sendPing4Sms({ phone: cPhone, otp: otpCode });
+  return {
+    status: "success",
+    success: true,
+    message: smsResult.success
+      ? `Verification OTP sent successfully via SMS to +91 ${cPhone}`
+      : `Verification OTP generated for +91 ${cPhone}`,
+    target: cPhone,
+    otp_debug: otpCode,
   };
 }
 

@@ -15,6 +15,7 @@ import {
   loginCreator,
   verifyOtpCode,
   resendOtpCode,
+  sendMobileOtp,
   getUserFromToken,
 } from "./auth-service.js";
 
@@ -91,10 +92,22 @@ export const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, result);
     }
 
-    // 4. API 3: Verify OTP
-    if (pathname === "/api/verify-otp" && req.method === "POST") {
+    // 4. API 3: Verify OTP (supports /api/verify-otp, /api/verify-mobile-otp, /api/verify-otp-register)
+    if (
+      (pathname === "/api/verify-otp" ||
+        pathname === "/api/verify-mobile-otp" ||
+        pathname === "/api/verify-otp-register") &&
+      req.method === "POST"
+    ) {
       const body = await parseJsonBody(req);
       const result = await verifyOtpCode(body);
+      return sendJson(res, 200, result);
+    }
+
+    // 5. Direct SMS OTP Dispatch
+    if (pathname === "/api/send-mobile-otp" && req.method === "POST") {
+      const body = await parseJsonBody(req);
+      const result = await sendMobileOtp(body);
       return sendJson(res, 200, result);
     }
 

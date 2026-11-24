@@ -83,7 +83,12 @@ export async function loginCreator(data: {
   return json;
 }
 
-export async function verifyOtp(data: { email: string; otp_code: string }): Promise<AuthResponse> {
+export async function verifyOtp(data: {
+  email?: string;
+  mobile_number?: string;
+  phone?: string;
+  otp_code: string;
+}): Promise<AuthResponse> {
   const res = await fetch(getApiEndpoint("/verify-otp"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -102,17 +107,33 @@ export async function verifyOtp(data: { email: string; otp_code: string }): Prom
   return json;
 }
 
-export async function resendOtp(email: string): Promise<AuthResponse> {
+export async function resendOtp(
+  data: string | { email?: string; mobile_number?: string; phone?: string },
+): Promise<AuthResponse> {
+  const payload = typeof data === "string" ? { email: data } : data;
   const res = await fetch(getApiEndpoint("/resend-otp"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email }),
+    body: JSON.stringify(payload),
   });
   const json = await res.json();
   if (!res.ok) {
     throw new Error(json.message || "Failed to resend code.");
   }
   return json;
+}
+
+export async function sendMobileOtp(phone: string): Promise<AuthResponse> {
+  const res = await fetch(getApiEndpoint("/send-mobile-otp"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ phone }),
+  });
+  return await res.json();
+}
+
+export async function verifyMobileOtp(phone: string, otp: string): Promise<AuthResponse> {
+  return verifyOtp({ mobile_number: phone, otp_code: otp });
 }
 
 export async function getMe(): Promise<{ success: boolean; user?: AuthUser } | null> {
