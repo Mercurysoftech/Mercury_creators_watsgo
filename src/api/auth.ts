@@ -22,6 +22,25 @@ function getApiEndpoint(endpoint: string): string {
   return `${base}${cleanEndpoint}`;
 }
 
+async function parseResponseJson(res: Response): Promise<any> {
+  const text = await res.text();
+  try {
+    return text ? JSON.parse(text) : {};
+  } catch {
+    if (res.status === 502 || res.status === 504) {
+      throw new Error(
+        "API service is temporarily unavailable (502 Bad Gateway). The backend server is currently starting up or restarting. Please try again in a few moments.",
+      );
+    }
+    if (res.status === 500) {
+      throw new Error(
+        "Backend server encountered an Internal Server Error (500). Please check the backend service logs.",
+      );
+    }
+    throw new Error(`Server returned HTTP ${res.status}: ${res.statusText || "Service unavailable"}`);
+  }
+}
+
 export interface AuthUser {
   id: number;
   full_name: string;
@@ -55,7 +74,7 @@ export async function registerCreator(data: {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
-  const json = await res.json();
+  const json = await parseResponseJson(res);
   if (!res.ok && !json.requires_otp) {
     throw new Error(json.message || "Registration failed.");
   }
@@ -72,7 +91,7 @@ export async function loginCreator(data: {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
-  const json = await res.json();
+  const json = await parseResponseJson(res);
   if (!res.ok && !json.requires_otp) {
     throw new Error(json.message || "Login failed.");
   }
@@ -96,7 +115,7 @@ export async function verifyOtp(data: {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
-  const json = await res.json();
+  const json = await parseResponseJson(res);
   if (!res.ok) {
     throw new Error(json.message || "Verification failed.");
   }
@@ -118,7 +137,7 @@ export async function resendOtp(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
-  const json = await res.json();
+  const json = await parseResponseJson(res);
   if (!res.ok) {
     throw new Error(json.message || "Failed to resend code.");
   }
@@ -131,7 +150,7 @@ export async function sendMobileOtp(phone: string): Promise<AuthResponse> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ phone }),
   });
-  return await res.json();
+  return await parseResponseJson(res);
 }
 
 export async function verifyMobileOtp(phone: string, otp: string): Promise<AuthResponse> {

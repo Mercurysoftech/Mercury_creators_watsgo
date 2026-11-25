@@ -1,6 +1,18 @@
 import crypto from "node:crypto";
-import nodemailer from "nodemailer";
 import { getDbPool, memoryStore } from "./db.js";
+
+let cachedNodemailer = null;
+async function getNodemailer() {
+  if (cachedNodemailer) return cachedNodemailer;
+  try {
+    const mod = await import("nodemailer");
+    cachedNodemailer = mod.default || mod;
+    return cachedNodemailer;
+  } catch (err) {
+    console.warn("[AUTH] ⚠️ 'nodemailer' module not installed in node_modules:", err.message);
+    return null;
+  }
+}
 
 /**
  * Hash a password using PBKDF2 with a cryptographically secure random salt.
@@ -107,6 +119,16 @@ export async function sendEmailOtp({ email, otp, fullName = "Creator" }) {
   }
 
   try {
+    const nodemailer = await getNodemailer();
+    if (!nodemailer) {
+      console.warn(`[AUTH] ⚠️ 'nodemailer' module is not installed. OTP for ${targetEmail} is: ${otp}`);
+      return {
+        success: false,
+        warning: "Nodemailer package not installed on server.",
+        otp,
+      };
+    }
+
     const transporter = nodemailer.createTransport({
       host,
       port,
