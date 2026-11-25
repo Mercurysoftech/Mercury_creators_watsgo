@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import tls from "node:tls";
 import { getDbPool, memoryStore } from "./db.js";
 
 let cachedNodemailer = null;
@@ -9,9 +10,136 @@ async function getNodemailer() {
     cachedNodemailer = mod.default || mod;
     return cachedNodemailer;
   } catch (err) {
-    console.warn("[AUTH] ⚠️ 'nodemailer' module not installed in node_modules:", err.message);
     return null;
   }
+}
+
+/**
+ * Pure Node.js zero-dependency TLS SMTP dispatcher.
+ * Connects directly to Hostinger (smtp.hostinger.com:465) or any SSL SMTP server
+ * without requiring nodemailer or any external packages.
+ */
+function sendNativeSmtpEmail({
+  host = "smtp.hostinger.com",
+  port = 465,
+  user,
+  pass,
+  from,
+  to,
+  subject,
+  text,
+  html,
+}) {
+  return new Promise((resolve, reject) => {
+    let resolved = false;
+    const socket = tls.connect(
+      {
+        host,
+        port,
+        rejectUnauthorized: false,
+        timeout: 12000,
+      },
+      () => {},
+    );
+
+    let stage = 0;
+    let buffer = "";
+
+    function send(cmd) {
+      socket.write(cmd + "\r\n");
+    }
+
+    socket.on("data", (data) => {
+      buffer += data.toString();
+      const lines = buffer.split("\r\n");
+      buffer = lines.pop();
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        const code = parseInt(line.substring(0, 3), 10);
+        const isLastLine = line.charAt(3) === " ";
+        if (!isLastLine) continue;
+
+        if (stage === 0 && code === 220) {
+          stage = 1;
+          send("EHLO localhost");
+        } else if (stage === 1 && code === 250) {
+          stage = 2;
+          send("AUTH LOGIN");
+        } else if (stage === 2 && code === 334) {
+          stage = 3;
+          send(Buffer.from(user).toString("base64"));
+        } else if (stage === 3 && code === 334) {
+          stage = 4;
+          send(Buffer.from(pass).toString("base64"));
+        } else if (stage === 4 && code === 235) {
+          stage = 5;
+          const fromMatch = from.match(/<([^>]+)>/);
+          const fromAddr = fromMatch ? fromMatch[1] : from;
+          send(`MAIL FROM:<${fromAddr}>`);
+        } else if (stage === 5 && code === 250) {
+          stage = 6;
+          send(`RCPT TO:<${to}>`);
+        } else if (stage === 6 && code === 250) {
+          stage = 7;
+          send("DATA");
+        } else if (stage === 7 && code === 354) {
+          stage = 8;
+          const boundary = "==_watsgo_" + Date.now() + "_==";
+          const mime = [
+            `From: ${from}`,
+            `To: ${to}`,
+            `Subject: ${subject}`,
+            `MIME-Version: 1.0`,
+            `Content-Type: multipart/alternative; boundary="${boundary}"`,
+            ``,
+            `--${boundary}`,
+            `Content-Type: text/plain; charset=utf-8`,
+            ``,
+            text,
+            ``,
+            `--${boundary}`,
+            `Content-Type: text/html; charset=utf-8`,
+            ``,
+            html,
+            ``,
+            `--${boundary}--`,
+            `.`,
+          ].join("\r\n");
+          socket.write(mime + "\r\n");
+        } else if (stage === 8 && code === 250) {
+          stage = 9;
+          send("QUIT");
+          if (!resolved) {
+            resolved = true;
+            resolve({ success: true, message: "Email sent via native TLS SMTP" });
+          }
+          socket.end();
+        } else if (code >= 400) {
+          socket.destroy();
+          if (!resolved) {
+            resolved = true;
+            reject(new Error(`SMTP Error [${code}]: ${line}`));
+          }
+        }
+      }
+    });
+
+    socket.on("timeout", () => {
+      socket.destroy();
+      if (!resolved) {
+        resolved = true;
+        reject(new Error("SMTP socket connection timed out"));
+      }
+    });
+
+    socket.on("error", (err) => {
+      if (!resolved) {
+        resolved = true;
+        reject(err);
+      }
+    });
+  });
 }
 
 /**
@@ -121,12 +249,20 @@ export async function sendEmailOtp({ email, otp, fullName = "Creator" }) {
   try {
     const nodemailer = await getNodemailer();
     if (!nodemailer) {
-      console.warn(`[AUTH] ⚠️ 'nodemailer' module is not installed. OTP for ${targetEmail} is: ${otp}`);
-      return {
-        success: false,
-        warning: "Nodemailer package not installed on server.",
-        otp,
-      };
+      console.log(`[AUTH] 📧 Nodemailer not found, using native Node.js TLS SMTP for ${targetEmail}...`);
+      const nativeResult = await sendNativeSmtpEmail({
+        host,
+        port,
+        user,
+        pass,
+        from: `"${fromName}" <${fromEmail}>`,
+        to: targetEmail,
+        subject: `${otp} is your WatsGo Creator Hub verification code`,
+        text: `Your WatsGo Creator Hub verification code is: ${otp}. It is valid for 10 minutes. Do not share this code with anyone.`,
+        html: htmlContent,
+      });
+      console.log(`[AUTH] 📧 Native SMTP email dispatched successfully to ${targetEmail}`);
+      return nativeResult;
     }
 
     const transporter = nodemailer.createTransport({
