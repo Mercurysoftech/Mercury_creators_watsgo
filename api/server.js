@@ -19,7 +19,7 @@ import {
   getUserFromToken,
 } from "./auth-service.js";
 
-const PORT = parseInt(process.env.API_PORT || process.env.PORT || "5000", 10);
+const PORT = parseInt(process.env.API_PORT || process.env.PORT || "9876", 10);
 
 function sendJson(res, statusCode, data) {
   res.writeHead(statusCode, {

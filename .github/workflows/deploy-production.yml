@@ -103,19 +103,30 @@ jobs:
               npm install -g pm2 || true
             fi
 
+            # Install API production dependencies
+            if [ -f "package.json" ]; then
+              echo "Installing API dependencies in $API_DIR..."
+              npm install --omit=dev --no-audit --no-fund || true
+            fi
+
             # If existing process was registered in cluster mode, delete it so it starts clean in fork mode
             if pm2 describe watsgo-creators-api 2>&1 | grep -qi "cluster"; then
               echo "Removing old cluster-mode process from PM2..."
               pm2 delete watsgo-creators-api || true
             fi
 
+            # Ensure port 9876 is exported for Apache proxy compatibility
+            export PORT=9876
+            export API_PORT=9876
+            export NODE_ENV=production
+
             # Start or restart in fork mode
             if pm2 describe watsgo-creators-api > /dev/null 2>&1; then
               echo "Restarting existing PM2 process in fork mode..."
-              pm2 restart watsgo-creators-api --update-env
+              PORT=9876 API_PORT=9876 pm2 restart watsgo-creators-api --update-env
             else
-              echo "Starting PM2 process in fork mode..."
-              pm2 start server.js --name "watsgo-creators-api"
+              echo "Starting PM2 process in fork mode on port 9876..."
+              PORT=9876 API_PORT=9876 pm2 start server.js --name "watsgo-creators-api"
             fi
 
             # Save PM2 process list for auto-recovery on system reboot

@@ -112,18 +112,19 @@ function copyNodeApiPlugin(): Plugin {
     name: "copy-node-api-plugin",
     closeBundle() {
       try {
-        const distApiDir = path.resolve(__dirname, "dist/api");
-        const srcApiDir = path.resolve(__dirname, "api");
+        const rootDir = process.cwd();
+        const distApiDir = path.resolve(rootDir, "dist/api");
+        const srcApiDir = path.resolve(rootDir, "api");
         if (fs.existsSync(srcApiDir)) {
           fs.cpSync(srcApiDir, distApiDir, { recursive: true });
         }
-        const ecoSrc = path.resolve(__dirname, "ecosystem.config.cjs");
-        const ecoDest = path.resolve(__dirname, "dist/ecosystem.config.cjs");
+        const ecoSrc = path.resolve(rootDir, "ecosystem.config.cjs");
+        const ecoDest = path.resolve(rootDir, "dist/ecosystem.config.cjs");
         if (fs.existsSync(ecoSrc)) {
           fs.copyFileSync(ecoSrc, ecoDest);
         }
-      } catch {
-        // Ignore if dist directory not ready
+      } catch (e) {
+        console.warn("copyNodeApiPlugin error:", e);
       }
     },
   };
