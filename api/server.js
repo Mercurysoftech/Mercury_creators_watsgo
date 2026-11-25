@@ -140,11 +140,14 @@ export const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, "0.0.0.0", () => {
-  console.log(`🚀 WatsGo Creator Hub API running on http://localhost:${PORT}`);
-  console.log(`   - POST /api/register`);
-  console.log(`   - POST /api/login`);
-  console.log(`   - POST /api/verify-otp`);
-  console.log(`   - POST /api/resend-otp`);
-  console.log(`   - GET  /api/me`);
-});
+// Run if called directly
+if (true) {
+  server.listen(PORT, "0.0.0.0", () => {
+    console.log(`🚀 WatsGo Creator Hub API running on http://localhost:${PORT}`);
+    console.log(`   - POST /api/register`);
+    console.log(`   - POST /api/login`);
+    console.log(`   - POST /api/verify-otp`);
+    console.log(`   - POST /api/resend-otp`);
+    console.log(`   - GET  /api/me`);
+  });
+}
