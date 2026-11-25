@@ -13,7 +13,7 @@ function getApiEndpoint(endpoint: string): string {
   // Strip all trailing slashes
   base = base.replace(/\/+$/, "");
 
-  // Ensure /api path is present (prevents https://creators.watsgo.in//register)
+  //123 Ensure /api path is present (prevents https://creators.watsgo.in//register)
   if (!base.endsWith("/api")) {
     base = `${base}/api`;
   }
