@@ -141,7 +141,7 @@ export const server = http.createServer(async (req, res) => {
 });
 
 // Run if called directly
-if (process.argv[1] && process.argv[1].endsWith("server.js")) {
+if (true) {
   server.listen(PORT, "0.0.0.0", () => {
     console.log(`🚀 WatsGo Creator Hub API running on http://localhost:${PORT}`);
     console.log(`   - POST /api/register`);

@@ -668,7 +668,6 @@ export async function registerCreator({ full_name, email, mobile_number, passwor
     email: cEmail,
     mobile_number: cPhone,
     requires_otp: true,
-    otp_preview: otpCode,
     email_sent: emailResult.success,
     sms_sent: smsResult.success,
   };
@@ -752,7 +751,6 @@ export async function loginCreator({ email, password, remember_me = false }) {
       email: user.email,
       message:
         "Your account is not verified yet. We have sent a new verification code to your email.",
-      otp_preview: process.env.NODE_ENV === "production" ? undefined : otpCode,
       email_sent: emailResult.success,
     };
   }
@@ -1087,7 +1085,6 @@ export async function resendOtpCode({ email, mobile_number, phone }) {
   return {
     success: true,
     message: resendMsg,
-    otp_preview: otpCode,
     email_sent: emailResult.success,
     sms_sent: smsResult.success,
   };
