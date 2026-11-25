@@ -448,7 +448,6 @@ function Auth({
   const [rememberMe, setRememberMe] = useState(false);
   const [agreeTerms, setAgreeTerms] = useState(false);
   const [otpDigits, setOtpDigits] = useState(["", "", "", ""]);
-  const [otpPreview, setOtpPreview] = useState("");
   const [infoMsg, setInfoMsg] = useState("");
   const [countdown, setCountdown] = useState(30);
 
@@ -526,12 +525,7 @@ function Auth({
       setLoading(false);
       if (res.requires_otp) {
         setInfoMsg(res.message || `A 4-digit verification code has been sent to ${email}`);
-        if (res.otp_preview) {
-          setOtpPreview(res.otp_preview);
-          setOtpDigits(res.otp_preview.slice(0, 4).split(""));
-        } else {
-          setOtpDigits(["", "", "", ""]);
-        }
+        setOtpDigits(["", "", "", ""]);
         setOtp(true);
         setCountdown(30);
       }
@@ -554,12 +548,7 @@ function Auth({
       setLoading(false);
       if (res.requires_otp) {
         setInfoMsg(res.message || `A 4-digit verification code has been sent to ${email}`);
-        if (res.otp_preview) {
-          setOtpPreview(res.otp_preview);
-          setOtpDigits(res.otp_preview.slice(0, 4).split(""));
-        } else {
-          setOtpDigits(["", "", "", ""]);
-        }
+        setOtpDigits(["", "", "", ""]);
         setOtp(true);
         setCountdown(30);
       } else if (res.user) {
@@ -601,10 +590,7 @@ function Auth({
     try {
       const res = await resendOtp({ email, mobile_number: mobile });
       setInfoMsg(res.message || `A fresh 4-digit verification code has been sent to ${email}`);
-      if (res.otp_preview) {
-        setOtpPreview(res.otp_preview);
-        setOtpDigits(res.otp_preview.slice(0, 4).split(""));
-      }
+      setOtpDigits(["", "", "", ""]);
       setCountdown(30);
     } catch (err: any) {
       setError(err.message || "Failed to resend code.");
@@ -693,22 +679,6 @@ function Auth({
                 }}
               >
                 📬 {infoMsg}
-              </div>
-            )}
-
-            {otpPreview && (
-              <div
-                style={{
-                  background: "#eff6ff",
-                  border: "1px solid #bfdbfe",
-                  color: "#1d4ed8",
-                  padding: "8px 12px",
-                  borderRadius: "8px",
-                  fontSize: "12px",
-                  margin: "8px 0 12px",
-                }}
-              >
-                💡 Live OTP code: <b>{otpPreview}</b>
               </div>
             )}
 
