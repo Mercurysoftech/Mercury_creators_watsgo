@@ -416,10 +416,10 @@ function Landing({ onStart, onLogin }: { onStart: () => void; onLogin: () => voi
         <Logo dark />
         <p>Create. Share. Earn.</p>
         <div>
-          <a>Terms</a>
-          <a>Privacy</a>
-          <a>Support</a>
-          <a>Contact</a>
+          <a href="https://watsgo.in/terms" target="_blank" rel="noopener noreferrer">Terms</a>
+          <a href="https://watsgo.in/privacy" target="_blank" rel="noopener noreferrer">Privacy</a>
+          <a href="#support">Support</a>
+          <a href="#contact">Contact</a>
         </div>
         <small>© 2025 WatsGo Technologies</small>
       </footer>
@@ -980,14 +980,52 @@ function Auth({
           )}
 
           {mode === "register" && (
-            <label className="check">
+            <label className="check" style={{ fontSize: "13px", lineHeight: "1.4", flexWrap: "wrap" }}>
               <input
                 type="checkbox"
                 required
                 checked={agreeTerms}
                 onChange={(e) => setAgreeTerms(e.target.checked)}
               />{" "}
-              I agree to the Terms of Service and Privacy Policy.
+              <span>
+                I agree to the{" "}
+                <a
+                  href="https://watsgo.in/terms"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  style={{ color: "#2563eb", textDecoration: "underline" }}
+                >
+                  Terms of Service
+                </a>{" "}
+                and{" "}
+                <a
+                  href="https://watsgo.in/privacy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  style={{ color: "#2563eb", textDecoration: "underline" }}
+                >
+                  Privacy Policy
+                </a>
+                .
+              </span>
+              <a
+                href="https://watsgo.in/terms"
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  color: "#2563eb",
+                  fontWeight: 600,
+                  textDecoration: "underline",
+                  marginLeft: "4px",
+                  display: "inline-flex",
+                  alignItems: "center",
+                }}
+              >
+                Click to see →
+              </a>
             </label>
           )}
 
