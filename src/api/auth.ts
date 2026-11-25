@@ -40,6 +40,8 @@ export interface AuthResponse {
   requires_otp?: boolean;
   email?: string;
   otp_preview?: string;
+  email_sent?: boolean;
+  sms_sent?: boolean;
 }
 
 export async function registerCreator(data: {
