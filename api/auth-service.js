@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import nodemailer from "nodemailer";
 import { getDbPool, memoryStore } from "./db.js";
 
 /**
@@ -52,6 +53,157 @@ export function verifyPassword(password, storedCombinedHash) {
  */
 export function generateOtp() {
   return crypto.randomInt(1000, 10000).toString();
+}
+
+/**
+ * Dispatch 4-digit OTP via Email using SMTP (Hostinger or custom SMTP).
+ */
+export async function sendEmailOtp({ email, otp, fullName = "Creator" }) {
+  const targetEmail = (email || "").trim().toLowerCase();
+  if (!targetEmail || !/^\S+@\S+\.\S+$/.test(targetEmail)) {
+    return {
+      success: false,
+      error: "Invalid email address provided for OTP dispatch.",
+    };
+  }
+
+  // Detect Hostinger webmail or custom host
+  let host = (process.env.SMTP_HOST || "smtp.hostinger.com").trim();
+  if (host.includes("mail.hostinger.com")) {
+    host = "smtp.hostinger.com";
+  }
+
+  const port = parseInt(process.env.SMTP_PORT || "465", 10);
+  const secure =
+    process.env.SMTP_SECURE === "false" || port === 587
+      ? false
+      : true;
+  const user = (process.env.SMTP_USER || "").trim();
+  const pass = (process.env.SMTP_PASS || "").trim();
+  const fromName = (process.env.SMTP_FROM_NAME || "WatsGo Creator Hub").trim();
+  const fromEmail = (process.env.SMTP_FROM_EMAIL || user || "no-reply@creators.watsgo.in").trim();
+
+  console.log(`[AUTH] 📧 Preparing to dispatch 4-digit OTP (${otp}) to email: ${targetEmail}`);
+  console.log(
+    `[AUTH] 📧 SMTP Config: Host=${host}, Port=${port}, Secure=${secure}, User=${user || "(none)"}`,
+  );
+
+  const isPlaceholderPass =
+    !pass ||
+    pass === "YOUR_SMTP_EMAIL_PASSWORD_HERE" ||
+    pass === "your_smtp_password_here" ||
+    pass === "YOUR_HOSTINGER_EMAIL_PASSWORD";
+
+  if (!user || isPlaceholderPass) {
+    console.warn(
+      `[AUTH] ⚠️ SMTP credentials not fully configured (user: "${user}", pass: "${isPlaceholderPass ? "PLACEHOLDER/EMPTY" : "OK"}"). The 4-digit OTP code is: ${otp}`,
+    );
+    return {
+      success: false,
+      warning:
+        "SMTP credentials not fully configured in .env. Please configure SMTP_USER and SMTP_PASS.",
+      otp,
+    };
+  }
+
+  try {
+    const transporter = nodemailer.createTransport({
+      host,
+      port,
+      secure,
+      auth: {
+        user,
+        pass,
+      },
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000,
+      tls: {
+        rejectUnauthorized: false,
+      },
+    });
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Your WatsGo Verification Code</title>
+      </head>
+      <body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e293b;">
+        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f8fafc; padding: 32px 16px;">
+          <tr>
+            <td align="center">
+              <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 520px; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.06); border: 1px solid #e2e8f0;">
+                <!-- Brand Header -->
+                <tr>
+                  <td style="background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%); padding: 32px 32px; text-align: center;">
+                    <div style="display: inline-block; background-color: #3b82f6; width: 44px; height: 44px; border-radius: 10px; line-height: 44px; color: #ffffff; font-size: 22px; font-weight: 800; margin-bottom: 12px;">W</div>
+                    <h1 style="color: #ffffff; font-size: 22px; margin: 0; font-weight: 700; letter-spacing: -0.5px;">WatsGo <span style="font-size: 13px; font-weight: 500; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px;">Creator Hub</span></h1>
+                  </td>
+                </tr>
+                <!-- Body Content -->
+                <tr>
+                  <td style="padding: 36px 32px;">
+                    <h2 style="font-size: 20px; font-weight: 700; color: #0f172a; margin: 0 0 12px;">Verify your creator account</h2>
+                    <p style="font-size: 15px; line-height: 24px; color: #475569; margin: 0 0 24px;">
+                      Hi <strong>${fullName}</strong>,<br>
+                      Thank you for creating your account on WatsGo Creator Hub. Please use the following 4-digit verification code to complete your registration:
+                    </p>
+
+                    <!-- OTP Code Box -->
+                    <div style="background: #f1f5f9; border: 2px dashed #cbd5e1; border-radius: 12px; padding: 24px; text-align: center; margin: 24px 0;">
+                      <span style="font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: #64748b; display: block; margin-bottom: 8px;">Your 4-Digit Verification Code</span>
+                      <span style="font-family: 'Courier New', Courier, monospace; font-size: 40px; font-weight: 800; letter-spacing: 12px; color: #2563eb; display: inline-block;">${otp}</span>
+                    </div>
+
+                    <p style="font-size: 13px; color: #64748b; margin: 20px 0 0; line-height: 20px;">
+                      ⏱️ This verification code is valid for <strong>10 minutes</strong>. For your security, never share this code with anyone.
+                    </p>
+                    <p style="font-size: 13px; color: #94a3b8; margin: 16px 0 0; line-height: 20px;">
+                      If you did not request this email, please disregard it.
+                    </p>
+                  </td>
+                </tr>
+                <!-- Footer -->
+                <tr>
+                  <td style="background-color: #f8fafc; padding: 20px 32px; border-top: 1px solid #e2e8f0; text-align: center;">
+                    <p style="font-size: 12px; color: #94a3b8; margin: 0;">
+                      © ${new Date().getFullYear()} WatsGo Creator Hub. All rights reserved.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </body>
+      </html>
+    `;
+
+    const info = await transporter.sendMail({
+      from: `"${fromName}" <${fromEmail}>`,
+      to: targetEmail,
+      subject: `${otp} is your WatsGo Creator Hub verification code`,
+      text: `Your WatsGo Creator Hub verification code is: ${otp}. It is valid for 10 minutes. Do not share this code with anyone.`,
+      html: htmlContent,
+    });
+
+    console.log(
+      `[AUTH] 📧 OTP email dispatched successfully to ${targetEmail} (Message ID: ${info.messageId})`,
+    );
+    return {
+      success: true,
+      messageId: info.messageId,
+    };
+  } catch (err) {
+    console.error(`[AUTH] ❌ Failed to dispatch email via SMTP to ${targetEmail}:`, err.message);
+    return {
+      success: false,
+      error: err.message,
+    };
+  }
 }
 
 /**
@@ -221,12 +373,19 @@ export async function registerCreator({ full_name, email, mobile_number, passwor
       [cPhone, cEmail, userId],
     );
 
-    // Save new 4-digit OTP
+    // Save new 4-digit OTP for both email and mobile
     await pool.query(
       `INSERT INTO otps (user_id, identifier, otp_code, type, expires_at, is_used, attempts)
        VALUES (?, ?, ?, 'registration', ?, 0, 0)`,
-      [userId, cPhone, otpCode, otpExpires],
+      [userId, cEmail, otpCode, otpExpires],
     );
+    if (cPhone && cPhone !== cEmail) {
+      await pool.query(
+        `INSERT INTO otps (user_id, identifier, otp_code, type, expires_at, is_used, attempts)
+         VALUES (?, ?, ?, 'registration', ?, 0, 0)`,
+        [userId, cPhone, otpCode, otpExpires],
+      );
+    }
 
     // Auto-create/insert into account_verification_otps if present for storefront compatibility
     try {
@@ -291,8 +450,9 @@ export async function registerCreator({ full_name, email, mobile_number, passwor
     memoryStore.otps.push({
       id: memoryStore.otps.length + 1,
       user_id: userId,
-      identifier: cPhone,
+      identifier: cEmail,
       email: cEmail,
+      mobile_number: cPhone,
       otp_code: otpCode,
       type: "registration",
       expires_at: otpExpires.toISOString(),
@@ -300,26 +460,59 @@ export async function registerCreator({ full_name, email, mobile_number, passwor
       attempts: 0,
       created_at: new Date().toISOString(),
     });
+    if (cPhone && cPhone !== cEmail) {
+      memoryStore.otps.push({
+        id: memoryStore.otps.length + 1,
+        user_id: userId,
+        identifier: cPhone,
+        email: cEmail,
+        mobile_number: cPhone,
+        otp_code: otpCode,
+        type: "registration",
+        expires_at: otpExpires.toISOString(),
+        is_used: 0,
+        attempts: 0,
+        created_at: new Date().toISOString(),
+      });
+    }
   }
 
-  // Dispatch 4-digit SMS OTP via Ping4SMS
-  const smsResult = await sendPing4Sms({ phone: cPhone, otp: otpCode });
+  // 1. Dispatch 4-digit OTP via Email SMTP
+  const emailResult = await sendEmailOtp({
+    email: cEmail,
+    otp: otpCode,
+    fullName: resolvedFullName,
+  });
+
+  // 2. Dispatch 4-digit SMS OTP via Ping4SMS if phone is available
+  const smsResult = cPhone
+    ? await sendPing4Sms({ phone: cPhone, otp: otpCode })
+    : { success: false };
 
   console.log(`\n=========================================`);
+  console.log(
+    `[AUTH] 📧 4-digit Email OTP for ${cEmail}: ${otpCode} (Email status: ${emailResult.success ? "SENT" : "PENDING/LOGGED"})`,
+  );
   console.log(
     `[AUTH] 📱 4-digit SMS OTP for +91 ${cPhone}: ${otpCode} (SMS status: ${smsResult.success ? "SENT" : "GATEWAY_PENDING"})`,
   );
   console.log(`=========================================\n`);
 
+  let dispatchMessage = `Verification code sent to your email (${cEmail})`;
+  if (smsResult.success) {
+    dispatchMessage += ` and via SMS to +91 ${cPhone}`;
+  }
+  dispatchMessage += ".";
+
   return {
     success: true,
-    message: smsResult.success
-      ? `Verification code sent via SMS to +91 ${cPhone}.`
-      : `Verification code generated for +91 ${cPhone}.`,
+    message: dispatchMessage,
     email: cEmail,
     mobile_number: cPhone,
     requires_otp: true,
     otp_preview: otpCode,
+    email_sent: emailResult.success,
+    sms_sent: smsResult.success,
   };
 }
 
@@ -387,6 +580,12 @@ export async function loginCreator({ email, password, remember_me = false }) {
       });
     }
 
+    const emailResult = await sendEmailOtp({
+      email: user.email,
+      otp: otpCode,
+      fullName: user.full_name || "Creator",
+    });
+
     console.log(`[AUTH] 📧 Verification OTP for ${user.email}: ${otpCode}`);
 
     return {
@@ -396,6 +595,7 @@ export async function loginCreator({ email, password, remember_me = false }) {
       message:
         "Your account is not verified yet. We have sent a new verification code to your email.",
       otp_preview: process.env.NODE_ENV === "production" ? undefined : otpCode,
+      email_sent: emailResult.success,
     };
   }
 
@@ -664,24 +864,39 @@ export async function resendOtpCode({ email, mobile_number, phone }) {
   if (!user) throw new Error("Account not found.");
 
   const targetPhone = user.mobile_number || cPhone;
+  const targetEmail = user.email || cEmail;
   const otpCode = generateOtp();
   const otpExpires = new Date(Date.now() + 10 * 60 * 1000);
 
   if (pool) {
     await pool.query(
       "UPDATE otps SET is_used = 1 WHERE identifier = ? OR identifier = ? OR user_id = ?",
-      [targetPhone, user.email, user.id],
+      [targetPhone, targetEmail, user.id],
     );
     await pool.query(
       `INSERT INTO otps (user_id, identifier, otp_code, type, expires_at, is_used, attempts)
        VALUES (?, ?, ?, 'registration', ?, 0, 0)`,
-      [user.id, targetPhone, otpCode, otpExpires],
+      [user.id, targetEmail, otpCode, otpExpires],
     );
+    if (targetPhone && targetPhone !== targetEmail) {
+      await pool.query(
+        `INSERT INTO otps (user_id, identifier, otp_code, type, expires_at, is_used, attempts)
+         VALUES (?, ?, ?, 'registration', ?, 0, 0)`,
+        [user.id, targetPhone, otpCode, otpExpires],
+      );
+    }
   } else {
+    memoryStore.otps.forEach((o) => {
+      if (o.identifier === targetPhone || o.identifier === targetEmail || o.user_id === user.id) {
+        o.is_used = 1;
+      }
+    });
     memoryStore.otps.push({
       id: memoryStore.otps.length + 1,
       user_id: user.id,
-      identifier: targetPhone,
+      identifier: targetEmail,
+      email: targetEmail,
+      mobile_number: targetPhone,
       otp_code: otpCode,
       type: "registration",
       expires_at: otpExpires.toISOString(),
@@ -691,17 +906,32 @@ export async function resendOtpCode({ email, mobile_number, phone }) {
     });
   }
 
-  // Dispatch SMS via Ping4SMS
-  const smsResult = await sendPing4Sms({ phone: targetPhone, otp: otpCode });
+  // 1. Dispatch Email OTP via SMTP
+  const emailResult = await sendEmailOtp({
+    email: targetEmail,
+    otp: otpCode,
+    fullName: user.full_name || "Creator",
+  });
 
-  console.log(`[AUTH] 📱 Resent 4-digit verification OTP for +91 ${targetPhone}: ${otpCode}`);
+  // 2. Dispatch SMS via Ping4SMS if phone available
+  const smsResult = targetPhone
+    ? await sendPing4Sms({ phone: targetPhone, otp: otpCode })
+    : { success: false };
+
+  console.log(`[AUTH] 📧 Resent 4-digit verification OTP for email ${targetEmail}: ${otpCode}`);
+
+  let resendMsg = `A fresh 4-digit verification code has been sent to your email (${targetEmail})`;
+  if (smsResult.success) {
+    resendMsg += ` and SMS to +91 ${targetPhone}`;
+  }
+  resendMsg += ".";
 
   return {
     success: true,
-    message: smsResult.success
-      ? `A fresh 4-digit verification code has been sent via SMS to +91 ${targetPhone}.`
-      : `A fresh verification code has been generated for +91 ${targetPhone}.`,
+    message: resendMsg,
     otp_preview: otpCode,
+    email_sent: emailResult.success,
+    sms_sent: smsResult.success,
   };
 }
 

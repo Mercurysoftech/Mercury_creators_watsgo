@@ -104,6 +104,12 @@ function Icon({ name, size = 20 }: { name: string; size?: number }) {
         )}
       </>
     ),
+    mail: (
+      <>
+        <rect x="3" y="5" width="18" height="14" rx="2" />
+        <path d="m3 7 9 6 9-6" />
+      </>
+    ),
   };
   return (
     <svg
@@ -443,6 +449,7 @@ function Auth({
   const [agreeTerms, setAgreeTerms] = useState(false);
   const [otpDigits, setOtpDigits] = useState(["", "", "", ""]);
   const [otpPreview, setOtpPreview] = useState("");
+  const [infoMsg, setInfoMsg] = useState("");
   const [countdown, setCountdown] = useState(30);
 
   const passwordRequirements = useMemo(
@@ -518,6 +525,7 @@ function Auth({
       });
       setLoading(false);
       if (res.requires_otp) {
+        setInfoMsg(res.message || `A 4-digit verification code has been sent to ${email}`);
         if (res.otp_preview) {
           setOtpPreview(res.otp_preview);
           setOtpDigits(res.otp_preview.slice(0, 4).split(""));
@@ -545,6 +553,7 @@ function Auth({
       });
       setLoading(false);
       if (res.requires_otp) {
+        setInfoMsg(res.message || `A 4-digit verification code has been sent to ${email}`);
         if (res.otp_preview) {
           setOtpPreview(res.otp_preview);
           setOtpDigits(res.otp_preview.slice(0, 4).split(""));
@@ -591,6 +600,7 @@ function Auth({
     setError("");
     try {
       const res = await resendOtp({ email, mobile_number: mobile });
+      setInfoMsg(res.message || `A fresh 4-digit verification code has been sent to ${email}`);
       if (res.otp_preview) {
         setOtpPreview(res.otp_preview);
         setOtpDigits(res.otp_preview.slice(0, 4).split(""));
@@ -645,13 +655,46 @@ function Auth({
             ← Back
           </button>
           <div className="auth-box">
-            <div className="auth-icon">
-              <Icon name="bell" />
+            <div className="auth-icon" style={{ background: "#eff6ff", color: "#2563eb" }}>
+              <Icon name="mail" size={24} />
             </div>
-            <h2>Verify Mobile Number</h2>
-            <p>
-              We sent a 4-digit verification code via SMS to <b>+91 {mobile || "your phone"}</b>
+            <h2>Verify Your Account</h2>
+            <p style={{ margin: "0 0 6px", fontSize: "14px", color: "#475569" }}>
+              We sent a 4-digit verification code to:
             </p>
+            <div
+              style={{
+                fontSize: "15px",
+                fontWeight: 600,
+                color: "#1d4ed8",
+                wordBreak: "break-all",
+                marginBottom: mobile ? "2px" : "12px",
+              }}
+            >
+              ✉️ {email || "your email address"}
+            </div>
+            {mobile && (
+              <div style={{ fontSize: "12px", color: "#64748b", marginBottom: "12px" }}>
+                📱 (also sent via SMS to +91 {mobile})
+              </div>
+            )}
+
+            {infoMsg && (
+              <div
+                style={{
+                  background: "#f0fdf4",
+                  border: "1px solid #bbf7d0",
+                  color: "#166534",
+                  padding: "8px 12px",
+                  borderRadius: "8px",
+                  fontSize: "12px",
+                  margin: "8px 0 12px",
+                  textAlign: "center",
+                }}
+              >
+                📬 {infoMsg}
+              </div>
+            )}
 
             {otpPreview && (
               <div
@@ -662,7 +705,7 @@ function Auth({
                   padding: "8px 12px",
                   borderRadius: "8px",
                   fontSize: "12px",
-                  margin: "14px 0 0",
+                  margin: "8px 0 12px",
                 }}
               >
                 💡 Live OTP code: <b>{otpPreview}</b>
@@ -707,7 +750,7 @@ function Auth({
             </Button>
 
             <small>
-              Didn't receive it?{" "}
+              Didn't receive the email?{" "}
               <button
                 type="button"
                 onClick={handleResend}
@@ -715,13 +758,18 @@ function Auth({
                 style={{
                   cursor: countdown > 0 ? "not-allowed" : "pointer",
                   opacity: countdown > 0 ? 0.7 : 1,
+                  fontWeight: 600,
+                  color: "#2563eb",
                 }}
               >
                 {countdown > 0
                   ? `Resend in 00:${countdown < 10 ? "0" : ""}${countdown}`
-                  : "Resend OTP via SMS"}
+                  : "Resend verification code"}
               </button>
             </small>
+            <p style={{ fontSize: "11px", color: "#94a3b8", marginTop: "10px", lineHeight: "16px" }}>
+              Please check your spam or junk folder if you don't see it in your inbox.
+            </p>
           </div>
         </div>
       </div>
